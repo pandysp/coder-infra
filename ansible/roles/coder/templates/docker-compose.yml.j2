@@ -1,0 +1,46 @@
+services:
+  postgres:
+    image: {{ coder_postgres_image }}
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: coder
+      POSTGRES_PASSWORD: "{{ coder_pg_password }}"
+      POSTGRES_DB: coder
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U coder -d coder"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  coder:
+    image: {{ coder_image }}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      CODER_PG_CONNECTION_URL: "postgresql://coder:{{ coder_pg_password }}@postgres:5432/coder?sslmode=disable"
+      CODER_ACCESS_URL: "https://{{ tailscale_fqdn }}"
+      CODER_HTTP_ADDRESS: "0.0.0.0:7080"
+      CODER_TELEMETRY_ENABLE: "false"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    group_add:
+      - "{{ docker_gid }}"
+
+  caddy:
+    image: {{ coder_caddy_image }}
+    restart: unless-stopped
+    depends_on:
+      - coder
+    ports:
+      - "127.0.0.1:80:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+
+volumes:
+  postgres_data:
+  caddy_data:

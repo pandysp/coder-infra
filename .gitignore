@@ -1,0 +1,30 @@
+# Pulumi
+pulumi/node_modules/
+pulumi/bin/
+pulumi/Pulumi.*.yaml
+!pulumi/Pulumi.yaml
+!pulumi/Pulumi.prod.yaml.template
+
+# Terraform
+templates/**/.terraform/
+templates/**/.terraform.lock.hcl
+templates/**/terraform.tfstate*
+
+# Ansible
+ansible/*.retry
+ansible/inventory/hosts.ini.tmp
+
+# Secrets
+*.pem
+*.key
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo

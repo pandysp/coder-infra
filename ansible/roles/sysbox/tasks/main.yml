@@ -1,0 +1,70 @@
+---
+- name: Install Sysbox dependencies
+  ansible.builtin.apt:
+    name:
+      - fuse
+      - rsync
+    state: present
+
+- name: Check if Sysbox is installed
+  ansible.builtin.command: dpkg -l sysbox-ce
+  register: sysbox_check
+  changed_when: false
+  failed_when: false
+
+- name: Download Sysbox package
+  ansible.builtin.get_url:
+    url: "https://downloads.nestybox.com/sysbox/releases/v{{ sysbox_version }}/sysbox-ce_{{ sysbox_version }}-0.linux_amd64.deb"
+    dest: /tmp/sysbox.deb
+    mode: "0644"
+  when: sysbox_check.rc != 0
+
+- name: Stop Docker before Sysbox install
+  ansible.builtin.systemd:
+    name: docker
+    state: stopped
+  when: sysbox_check.rc != 0
+
+- name: Install Sysbox
+  ansible.builtin.apt:
+    deb: /tmp/sysbox.deb
+    state: present
+  when: sysbox_check.rc != 0
+
+- name: Clean up Sysbox package
+  ansible.builtin.file:
+    path: /tmp/sysbox.deb
+    state: absent
+
+- name: Update Docker daemon config with Sysbox runtime
+  ansible.builtin.copy:
+    content: |
+      {
+        "log-driver": "json-file",
+        "log-opts": {
+          "max-size": "{{ docker_log_max_size }}",
+          "max-file": "{{ docker_log_max_file }}"
+        },
+        "storage-driver": "overlay2",
+        "runtimes": {
+          "sysbox-runc": {
+            "path": "/usr/bin/sysbox-runc"
+          }
+        }
+      }
+    dest: /etc/docker/daemon.json
+    mode: "0644"
+
+- name: Enable Sysbox services
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop:
+    - sysbox-mgr
+    - sysbox-fs
+
+- name: Start Docker with Sysbox runtime
+  ansible.builtin.systemd:
+    name: docker
+    state: started

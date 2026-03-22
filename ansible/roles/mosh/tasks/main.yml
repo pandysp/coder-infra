@@ -1,0 +1,5 @@
+---
+- name: Install mosh
+  ansible.builtin.apt:
+    name: mosh
+    state: present

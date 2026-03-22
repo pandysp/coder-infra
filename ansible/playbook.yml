@@ -1,0 +1,11 @@
+---
+- name: Configure Coder development server
+  hosts: coder
+  become: true
+  roles:
+    - system
+    - ufw
+    - docker
+    - sysbox
+    - coder
+    - mosh

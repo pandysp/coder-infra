@@ -1,0 +1,71 @@
+---
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install base packages
+  ansible.builtin.apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg
+      - lsb-release
+      - jq
+      - htop
+      - vim
+      - unzip
+      - git
+      - software-properties-common
+    state: present
+
+- name: Set locale to en_US.UTF-8
+  ansible.builtin.locale_gen:
+    name: en_US.UTF-8
+    state: present
+
+- name: Set default locale
+  ansible.builtin.copy:
+    content: "LANG=en_US.UTF-8\n"
+    dest: /etc/default/locale
+    mode: "0644"
+
+- name: Check if swap file exists
+  ansible.builtin.stat:
+    path: /swapfile
+  register: swap_file
+
+- name: Create swap file
+  ansible.builtin.command: fallocate -l {{ swap_size }} /swapfile
+  when: not swap_file.stat.exists
+  changed_when: true
+
+- name: Set swap file permissions
+  ansible.builtin.file:
+    path: /swapfile
+    mode: "0600"
+  when: not swap_file.stat.exists
+
+- name: Format swap file
+  ansible.builtin.command: mkswap /swapfile
+  when: not swap_file.stat.exists
+  changed_when: true
+
+- name: Enable swap
+  ansible.builtin.command: swapon /swapfile
+  when: not swap_file.stat.exists
+  changed_when: true
+
+- name: Add swap to fstab
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    line: "/swapfile none swap sw 0 0"
+    state: present
+
+- name: Set swappiness
+  ansible.posix.sysctl:
+    name: vm.swappiness
+    value: "{{ swap_swappiness }}"
+    state: present
+    reload: true

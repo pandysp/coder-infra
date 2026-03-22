@@ -1,0 +1,17 @@
+---
+# System
+swap_size: "4G"
+swap_swappiness: 10
+
+# Docker
+docker_log_max_size: "10m"
+docker_log_max_file: "3"
+
+# Sysbox
+sysbox_version: "0.6.6"
+
+# Coder
+coder_dir: /opt/coder
+coder_image: "ghcr.io/coder/coder:latest"
+coder_postgres_image: "postgres:16-alpine"
+coder_caddy_image: "caddy:2-alpine"

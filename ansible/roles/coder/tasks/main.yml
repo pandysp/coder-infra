@@ -1,0 +1,77 @@
+---
+- name: Create Coder directory
+  ansible.builtin.file:
+    path: "{{ coder_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Get Tailscale FQDN
+  ansible.builtin.command: tailscale status --json
+  register: tailscale_status
+  changed_when: false
+
+- name: Set Tailscale hostname fact
+  ansible.builtin.set_fact:
+    tailscale_fqdn: "{{ (tailscale_status.stdout | from_json).Self.DNSName | regex_replace('\\.$', '') }}"
+
+- name: Get Docker group ID
+  ansible.builtin.command: getent group docker
+  register: docker_group
+  changed_when: false
+
+- name: Set Docker group ID fact
+  ansible.builtin.set_fact:
+    docker_gid: "{{ docker_group.stdout.split(':')[2] }}"
+
+- name: Check for existing PostgreSQL password
+  ansible.builtin.stat:
+    path: "{{ coder_dir }}/.pg_password"
+  register: pg_password_file
+
+- name: Generate PostgreSQL password
+  ansible.builtin.copy:
+    content: "{{ lookup('ansible.builtin.password', '/dev/null', length=32, chars=['ascii_letters', 'digits']) }}"
+    dest: "{{ coder_dir }}/.pg_password"
+    mode: "0600"
+  when: not pg_password_file.stat.exists
+
+- name: Read PostgreSQL password
+  ansible.builtin.slurp:
+    src: "{{ coder_dir }}/.pg_password"
+  register: pg_password_content
+
+- name: Set PostgreSQL password fact
+  ansible.builtin.set_fact:
+    coder_pg_password: "{{ pg_password_content.content | b64decode }}"
+
+- name: Deploy Docker Compose file
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ coder_dir }}/docker-compose.yml"
+    mode: "0600"
+
+- name: Deploy Caddyfile
+  ansible.builtin.template:
+    src: Caddyfile.j2
+    dest: "{{ coder_dir }}/Caddyfile"
+    mode: "0644"
+
+- name: Start Coder stack
+  ansible.builtin.command:
+    cmd: docker compose up -d
+    chdir: "{{ coder_dir }}"
+  changed_when: true
+
+- name: Configure Tailscale Serve for HTTPS
+  ansible.builtin.command: tailscale serve --bg --https=443 http://localhost:80
+  changed_when: true
+
+- name: Wait for Coder to be ready
+  ansible.builtin.uri:
+    url: "http://localhost:80/api/v2/buildinfo"
+    method: GET
+    status_code: 200
+  register: coder_health
+  retries: 30
+  delay: 5
+  until: coder_health.status == 200

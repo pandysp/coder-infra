@@ -1,0 +1,21 @@
+# Copy this file to Pulumi.prod.yaml and set your values.
+# Secrets are encrypted by Pulumi — use `pulumi config set --secret <key> <value>`.
+#
+# Required:
+#   pulumi config set --secret hcloud:token <your-hetzner-api-token>
+#   pulumi config set --secret tailscaleAuthKey <your-tailscale-auth-key>
+#   pulumi config set --secret claudeSetupToken <output-of-claude-setup-token>
+#   pulumi config set --secret anthropicApiKey <your-anthropic-api-key>
+#   pulumi config set coderAdminEmail your@email.com
+#
+# Optional:
+#   pulumi config set serverName coder-dev
+#   pulumi config set serverType cx33
+#   pulumi config set serverLocation fsn1
+#   pulumi config set --secret githubToken <your-github-token>
+
+config:
+  coder-infra:serverName: coder-dev
+  coder-infra:serverType: cx33
+  coder-infra:serverLocation: fsn1
+  coder-infra:coderAdminEmail: your@email.com
