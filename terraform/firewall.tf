@@ -1,7 +1,7 @@
 # No inbound rules — all access is via Tailscale.
 # Tailscale uses NAT traversal (outbound), so no inbound firewall rules needed.
 resource "hcloud_firewall" "default" {
-  name = "coder-no-inbound"
+  name = "${var.server_name}-no-inbound"
 
   rule {
     direction       = "out"

@@ -7,6 +7,5 @@ output "hostname" {
 }
 
 output "deploy_public_key" {
-  value     = tls_private_key.deploy.public_key_openssh
-  sensitive = true
+  value = tls_private_key.deploy.public_key_openssh
 }

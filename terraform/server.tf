@@ -19,4 +19,10 @@ resource "hcloud_server" "coder" {
     tailscale_auth_key = var.tailscale_auth_key
     hostname           = var.server_name
   })
+
+  # user_data is only consumed at boot time; changing the auth key should not
+  # destroy the server. Use force_reprovision to re-run Ansible instead.
+  lifecycle {
+    ignore_changes = [user_data]
+  }
 }
