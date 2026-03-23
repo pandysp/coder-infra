@@ -1,4 +1,6 @@
 terraform {
+  required_version = ">= 1.9"
+
   required_providers {
     coder = {
       source = "coder/coder"
@@ -58,7 +60,7 @@ resource "coder_agent" "main" {
       sudo apt-get install -y -qq nodejs
     fi
 
-    if [ -n "${CLAUDE_SETUP_TOKEN:-}" ]; then
+    if [ -n "$${CLAUDE_SETUP_TOKEN:-}" ]; then
       npx --yes @anthropic-ai/claude-code@latest setup-token "$CLAUDE_SETUP_TOKEN" 2>/dev/null || true
       unset CLAUDE_SETUP_TOKEN
     fi
@@ -90,10 +92,10 @@ resource "coder_agent" "main" {
 }
 
 module "claude_code" {
-  source                  = "registry.coder.com/coder/claude-code/coder"
-  version                 = "1.0.0"
-  agent_id                = coder_agent.main.id
-  experiment_report_tasks = true
+  source   = "registry.coder.com/coder/claude-code/coder"
+  version  = "4.8.1"
+  agent_id = coder_agent.main.id
+  workdir  = "/home/coder"
 }
 
 resource "coder_app" "web_preview" {
