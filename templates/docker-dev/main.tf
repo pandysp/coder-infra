@@ -48,11 +48,10 @@ resource "coder_agent" "main" {
     #!/bin/bash
     set -e
 
-    if ! command -v tmux &> /dev/null; then
+    # Only install what codercom/enterprise-base:ubuntu doesn't ship
+    if ! command -v rg &> /dev/null; then
       sudo apt-get update -qq
-      sudo apt-get install -y -qq \
-        build-essential git curl wget vim tmux jq unzip \
-        ripgrep fd-find htop tree python3 python3-pip
+      sudo apt-get install -y -qq ripgrep fd-find tree
     fi
 
     if ! command -v node &> /dev/null; then

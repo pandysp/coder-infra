@@ -1,0 +1,43 @@
+name: Validate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  terraform:
+    name: Terraform validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: "1.11.5"
+          tofu_wrapper: false
+
+      - name: Validate infrastructure
+        run: cd terraform && tofu init -backend=false && tofu validate
+
+      - name: Validate base-dev template
+        run: cd templates/base-dev && tofu init -backend=false && tofu validate
+
+      - name: Validate docker-dev template
+        run: cd templates/docker-dev && tofu init -backend=false && tofu validate
+
+  ansible:
+    name: Ansible syntax check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Ansible
+        run: pip install ansible
+
+      - name: Install Galaxy collections
+        run: cd ansible && ansible-galaxy collection install -r requirements.yml
+
+      - name: Syntax check
+        run: cd ansible && ansible-playbook playbook.yml --syntax-check -i inventory/hosts.ini.example
