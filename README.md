@@ -8,7 +8,7 @@ Persistent remote Claude Code sessions with project isolation. No public ports. 
 
 | Layer | Tool |
 |-------|------|
-| Provisioning | Pulumi (TypeScript) |
+| Provisioning | Terraform/OpenTofu (HCL) |
 | Configuration | Ansible (roles-based) |
 | Networking | Tailscale (zero-trust, HTTPS via Serve) |
 | Workspaces | Coder Community Edition |
@@ -18,24 +18,20 @@ Persistent remote Claude Code sessions with project isolation. No public ports. 
 ## Quick Start
 
 ```bash
-# 1. Install dependencies
-cd pulumi && npm install
-cd ../ansible && ansible-galaxy collection install -r requirements.yml
+# 1. Install Ansible dependencies
+cd ansible && ansible-galaxy collection install -r requirements.yml && cd ..
 
 # 2. Configure
-cd ../pulumi
-pulumi stack init prod
-pulumi config set --secret hcloud:token <hetzner-token>
-pulumi config set --secret tailscaleAuthKey <tailscale-auth-key>
-pulumi config set --secret claudeSetupToken <claude-setup-token>
-pulumi config set --secret anthropicApiKey <anthropic-api-key>
-pulumi config set coderAdminEmail your@email.com
+cd terraform
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars with your secrets and email
 
 # 3. Deploy
-pulumi up
+terraform init
+terraform apply
 
 # 4. Verify
-../scripts/verify.sh coder-dev
+cd .. && scripts/verify.sh coder-dev
 ```
 
 Then open the printed Coder URL, create your admin account, and push the workspace templates.
@@ -57,6 +53,41 @@ Hetzner CX33 (no public inbound ports)
 
 - **base-dev**: Claude Code, tmux, Node.js, Python, common CLI tools, persistent home volume
 - **docker-dev**: Everything above + full Docker daemon inside the workspace (Sysbox, no `--privileged`)
+
+## State Security
+
+Terraform stores all resource attributes — including secrets — in `terraform.tfstate` as plain text. This file contains your SSH private key, Tailscale auth key, and API tokens.
+
+**Recommendations:**
+- `chmod 600 terraform.tfstate terraform.tfstate.backup`
+- Never commit state files to version control (already in `.gitignore`)
+- For encrypted state at rest, use a remote backend:
+  - **Hetzner Object Storage** (S3-compatible — you already have the account)
+  - **Terraform Cloud** free tier (encrypted, access-controlled)
+
+See `terraform/terraform.tfvars.example` for backend configuration examples.
+
+## Re-provisioning
+
+To re-run Ansible without replacing the server (e.g., after rotating API keys):
+
+```bash
+cd terraform
+# Edit terraform.tfvars:
+#   force_reprovision = "2026-03-23-rotated-keys"
+terraform apply
+```
+
+## Migration from Pulumi
+
+If you previously deployed with Pulumi:
+
+```bash
+cd pulumi && pulumi destroy && cd ..
+cd terraform && terraform init && terraform apply
+```
+
+This is a clean cutover — Terraform creates fresh resources. The Tailscale device persists if using the same hostname and auth key.
 
 ## License
 

@@ -5,7 +5,7 @@ Self-hosted Coder + Claude Code on Hetzner VPS with Tailscale zero-trust network
 OSS reference setup for solo developers who want persistent remote CC sessions with project isolation.
 
 ## Stack
-- **Pulumi** (TypeScript) — infrastructure provisioning (Hetzner Cloud)
+- **Terraform/OpenTofu** (HCL) — infrastructure provisioning (Hetzner Cloud)
 - **Ansible** — server configuration (roles-based)
 - **Tailscale** — zero-trust networking (no public ports)
 - **Coder** (Community Edition) — workspace management
@@ -22,48 +22,33 @@ Hetzner CX33 (4 vCPU, 8GB RAM, 100GB NVMe, Ubuntu 24.04)
         └── Workspace template: docker-dev (base-dev + DinD via Sysbox)
 ```
 
-## Reference: openclaw-infra
-This repo mirrors the structure of `../openclaw-infra/` — Andy's existing IaC repo for OpenClaw deployment.
-**Read and reuse patterns from openclaw-infra when building this repo.**
-
-Key files to reference:
-- `../openclaw-infra/pulumi/index.ts` — Pulumi program structure, config loading, Ansible integration
-- `../openclaw-infra/pulumi/server.ts` — Hetzner server creation
-- `../openclaw-infra/pulumi/firewall.ts` — Hetzner firewall (no inbound)
-- `../openclaw-infra/pulumi/user-data.ts` — cloud-init for Tailscale bootstrap
-- `../openclaw-infra/ansible/playbook.yml` — playbook structure
-- `../openclaw-infra/ansible/roles/system/` — base system setup
-- `../openclaw-infra/ansible/roles/ufw/` — firewall rules
-- `../openclaw-infra/ansible/roles/docker/` — Docker installation
-- `../openclaw-infra/scripts/provision.sh` — Ansible wrapper called by Pulumi
-
 ## Reference: Coder docker-claude template
 The official Coder template for Claude Code uses:
 - `module "claude-code"` from `registry.coder.com/coder/claude-code/coder`
 - Docker volumes for persistent /home/coder/
 - `coder_agent` resource with metadata, display_apps, startup_script
 - `coder_app` for web preview ports
-- `experiment_report_tasks = true` for Coder Tasks UI
+- `report_tasks = true` for Coder Tasks UI
 
-## Repo Structure to Build
+## Repo Structure
 ```
 coder-infra/
 ├── CLAUDE.md                         # This file
 ├── README.md                         # Setup guide
 ├── .gitignore
-├── pulumi/
-│   ├── Pulumi.yaml                   # Project definition
-│   ├── Pulumi.prod.yaml.template     # Config template (copy + customize)
-│   ├── index.ts                      # Main: config → server → provision
-│   ├── server.ts                     # Hetzner server + SSH key
-│   ├── firewall.ts                   # No inbound, all outbound
-│   ├── user-data.ts                  # Cloud-init: Tailscale bootstrap
-│   ├── package.json
-│   └── tsconfig.json
+├── terraform/
+│   ├── versions.tf                   # Provider requirements (>= 1.9)
+│   ├── variables.tf                  # All input variables with defaults
+│   ├── main.tf                       # Ansible provisioner (terraform_data + local-exec)
+│   ├── server.tf                     # Hetzner server + TLS deploy key + SSH key
+│   ├── firewall.tf                   # No inbound, all outbound
+│   ├── outputs.tf                    # server_ipv4, hostname, deploy_public_key
+│   ├── user-data.sh.tftpl            # Cloud-init: Tailscale bootstrap
+│   └── terraform.tfvars.example      # Config template (copy + customize)
 ├── ansible/
 │   ├── ansible.cfg
 │   ├── playbook.yml
-│   ├── inventory/hosts.ini
+│   ├── inventory/hosts.ini.example
 │   ├── group_vars/all.yml
 │   ├── requirements.yml
 │   └── roles/
@@ -80,37 +65,40 @@ coder-infra/
 │   ├── base-dev/main.tf              # CC + tmux + tools
 │   └── docker-dev/main.tf            # base-dev + Sysbox DinD
 ├── scripts/
-│   ├── provision.sh                  # Ansible wrapper (called by Pulumi)
+│   ├── provision.sh                  # Ansible wrapper (called by Terraform)
 │   └── verify.sh                     # Post-deploy health check
 └── docs/
     └── setup.md                      # Detailed setup instructions
 ```
 
-## Pulumi Config Keys
+## Terraform Variables
 ```
-hcloud:token (secret) — Hetzner API token
-tailscaleAuthKey (secret) — Tailscale auth key (reusable, ephemeral)
-claudeSetupToken (secret) — From `claude setup-token`
-anthropicApiKey (secret) — For CC API access in workspaces
-serverName — hostname (default: "coder-dev")
-serverType — Hetzner type (default: "cx33")
-serverLocation — DC location (default: "fsn1")
-coderAdminEmail — admin user email
-githubToken (secret, optional) — for workspace repo access
+hcloud_token (sensitive) — Hetzner API token
+tailscale_auth_key (sensitive) — Tailscale auth key (reusable, ephemeral)
+claude_setup_token (sensitive) — From `claude setup-token`
+anthropic_api_key (sensitive) — For CC API access in workspaces
+server_name — hostname (default: "coder-dev")
+server_type — Hetzner type (default: "cx33")
+server_location — DC location (default: "fsn1")
+coder_admin_email — admin user email
+github_token (sensitive, optional) — for workspace repo access
+force_reprovision — change to re-run Ansible without server replacement
 ```
 
-## Key Patterns from openclaw-infra
-1. Cloud-init only does Tailscale bootstrap; Ansible does everything else
-2. `scripts/provision.sh` wraps Ansible, receives secrets via env vars from Pulumi
-3. Pulumi `command.local.Command` triggers Ansible on server creation/replacement
-4. Secrets never stored on disk — passed as env vars
+## Key Patterns
+1. Cloud-init only does Tailscale bootstrap (with --force-reauth); Ansible does everything else
+2. `scripts/provision.sh` wraps Ansible, receives secrets via env vars from Terraform
+3. `terraform_data` with `local-exec` provisioner triggers Ansible on server creation/replacement
+4. Secrets passed via temp file to Ansible (not CLI args), cleaned up in trap
 5. Shred cloud-init log after deploy (contains secrets)
-6. Deploy keys generated by Pulumi (ED25519)
-7. Pulumi Cloud for state management
+6. Deploy keys generated by Terraform (`tls_private_key`, ED25519)
+7. Local state (`terraform.tfstate`) by default — optional remote backend for encryption
+8. `force_reprovision` variable for secret rotation without server replacement
+9. Destroy-time provisioner runs `tailscale logout` (graceful fallback if SSH fails)
 
 ## Coding Style
-- TypeScript: strict mode, explicit types
+- Terraform: HCL with consistent formatting, one resource per logical file
 - Ansible: YAML with comments, one task per logical action
-- Terraform: official Coder provider patterns
+- Terraform: official Coder provider patterns for workspace templates
 - All config values should have sensible defaults where possible
-- Template files (.j2) for anything that needs variable substitution
+- Template files (.j2, .tftpl) for anything that needs variable substitution

@@ -1,11 +1,11 @@
-# Pulumi
-pulumi/node_modules/
-pulumi/bin/
-pulumi/Pulumi.*.yaml
-!pulumi/Pulumi.yaml
-!pulumi/Pulumi.prod.yaml.template
+# Terraform (infrastructure)
+terraform/.terraform/
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+terraform/terraform.tfvars
+terraform/*.auto.tfvars
 
-# Terraform
+# Terraform (workspace templates)
 templates/**/.terraform/
 templates/**/.terraform.lock.hcl
 templates/**/terraform.tfstate*

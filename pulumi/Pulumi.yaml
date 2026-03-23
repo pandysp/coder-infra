@@ -1,6 +1,0 @@
-name: coder-infra
-runtime:
-  name: nodejs
-  options:
-    typescript: true
-description: Self-hosted Coder + Claude Code on Hetzner with Tailscale zero-trust networking

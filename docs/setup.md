@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- [Pulumi CLI](https://www.pulumi.com/docs/install/) with a Pulumi Cloud account
+- [Terraform](https://developer.hashicorp.com/terraform/install) >= 1.9 (or [OpenTofu](https://opentofu.org/docs/intro/install/))
 - [Ansible](https://docs.ansible.com/ansible/latest/installation_guide/) >= 2.15
 - [Tailscale](https://tailscale.com/download) installed and connected on your local machine
 - A [Hetzner Cloud](https://www.hetzner.com/cloud) account with API token
@@ -14,32 +14,32 @@
 
 ```bash
 git clone <repo-url> && cd coder-infra
-cd pulumi && npm install
 ```
 
-Initialize the Pulumi stack:
+Copy and edit the Terraform variables file:
 
 ```bash
-pulumi stack init prod
+cd terraform
+cp terraform.tfvars.example terraform.tfvars
 ```
 
-Set required config values:
+Edit `terraform.tfvars` with your values:
 
-```bash
-pulumi config set --secret hcloud:token <your-hetzner-api-token>
-pulumi config set --secret tailscaleAuthKey <your-tailscale-auth-key>
-pulumi config set --secret claudeSetupToken <your-claude-setup-token>
-pulumi config set --secret anthropicApiKey <your-anthropic-api-key>
-pulumi config set coderAdminEmail your@email.com
+```hcl
+hcloud_token       = "<your-hetzner-api-token>"
+tailscale_auth_key = "<your-tailscale-auth-key>"
+claude_setup_token = "<output-of-claude-setup-token>"
+anthropic_api_key  = "<your-anthropic-api-key>"
+coder_admin_email  = "your@email.com"
 ```
 
-Optional config (these have defaults):
+Optional variables (these have defaults):
 
-```bash
-pulumi config set serverName coder-dev          # default: coder-dev
-pulumi config set serverType cx33               # default: cx33
-pulumi config set serverLocation fsn1           # default: fsn1
-pulumi config set --secret githubToken <token>  # for workspace repo access
+```hcl
+server_name     = "coder-dev"          # default: coder-dev
+server_type     = "cx33"               # default: cx33
+server_location = "fsn1"               # default: fsn1
+github_token    = "<your-github-token>" # for workspace repo access
 ```
 
 ## 2. Install Ansible Dependencies
@@ -52,13 +52,14 @@ ansible-galaxy collection install -r requirements.yml
 ## 3. Deploy
 
 ```bash
-cd ../pulumi
-pulumi up
+cd ../terraform
+terraform init
+terraform apply
 ```
 
 This will:
 1. Create a Hetzner CX33 server with no public inbound ports
-2. Bootstrap Tailscale via cloud-init (the only thing cloud-init does)
+2. Bootstrap Tailscale via cloud-init (with `--force-reauth` for safe server replacement)
 3. Wait for the server to appear on your tailnet
 4. Run Ansible to configure Docker, Sysbox, and Coder
 5. Start Coder via Docker Compose with Caddy reverse proxy
@@ -90,6 +91,19 @@ coder templates push docker-dev \
 ```bash
 ../scripts/verify.sh coder-dev
 ```
+
+## State Security
+
+Terraform stores all resource attributes in `terraform.tfstate` as plain JSON, including sensitive values like your SSH private key and API tokens.
+
+**Protect your state file:**
+- `chmod 600 terraform.tfstate terraform.tfstate.backup`
+- Never commit state files (already in `.gitignore`)
+
+**For encrypted state**, configure a remote backend in `versions.tf`:
+
+- **Hetzner Object Storage** (S3-compatible, see example in `terraform.tfvars.example`)
+- **Terraform Cloud** free tier (encrypted at rest, access-controlled)
 
 ## Workspace Templates
 
@@ -144,6 +158,14 @@ Hetzner CX33 (no public inbound ports)
 ssh root@coder-dev "cd /opt/coder && docker compose pull && docker compose up -d"
 ```
 
+### Re-provision (e.g., after rotating secrets)
+
+```bash
+cd terraform
+# Edit terraform.tfvars: force_reprovision = "2026-03-23-rotated-keys"
+terraform apply
+```
+
 ### SSH to Server
 
 ```bash
@@ -154,8 +176,10 @@ mosh root@coder-dev  # for unreliable connections
 ### Destroy
 
 ```bash
-cd pulumi && pulumi destroy
+cd terraform && terraform destroy
 ```
+
+This removes the Hetzner server and attempts to log the device out of Tailscale.
 
 ## Troubleshooting
 
@@ -164,3 +188,5 @@ cd pulumi && pulumi destroy
 **Coder not responding**: SSH to the server and check Docker: `docker compose -f /opt/coder/docker-compose.yml logs`.
 
 **Sysbox containers failing**: Ensure the kernel supports user namespaces: `ssh root@coder-dev "sysctl kernel.unprivileged_userns_clone"`. Ubuntu 24.04 enables this by default.
+
+**Re-provisioning fails**: If Ansible fails mid-run, `terraform apply` will re-run the full playbook. The playbook is idempotent — safe to re-run.

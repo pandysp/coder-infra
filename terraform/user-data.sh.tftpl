@@ -1,15 +1,4 @@
-import * as pulumi from "@pulumi/pulumi";
-
-export interface UserDataConfig {
-    tailscaleAuthKey: pulumi.Output<string>;
-    hostname: string;
-}
-
-// Cloud-init only does Tailscale bootstrap.
-// Everything else is configured by Ansible after the server joins the tailnet.
-export function generateUserData(config: UserDataConfig): pulumi.Output<string> {
-    return config.tailscaleAuthKey.apply((authKey) => {
-        return `#!/bin/bash
+#!/bin/bash
 set -euo pipefail
 exec > >(tee /var/log/cloud-init-coder.log) 2>&1
 echo "=== Coder Bootstrap: $(date) ==="
@@ -27,12 +16,9 @@ fi
 
 # Install and join Tailscale with SSH enabled
 curl -fsSL https://tailscale.com/install.sh | sh
-echo "${authKey}" > /tmp/ts-authkey
+echo "${tailscale_auth_key}" > /tmp/ts-authkey
 chmod 600 /tmp/ts-authkey
-tailscale up --authkey "file:/tmp/ts-authkey" --hostname="${config.hostname}" --ssh
+tailscale up --authkey "file:/tmp/ts-authkey" --hostname="${hostname}" --ssh --force-reauth
 rm -f /tmp/ts-authkey
 
 echo "=== Bootstrap complete: $(date) ==="
-`;
-    });
-}
