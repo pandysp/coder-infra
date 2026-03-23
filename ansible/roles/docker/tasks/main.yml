@@ -29,16 +29,8 @@
     update_cache: true
 
 - name: Configure Docker daemon
-  ansible.builtin.copy:
-    content: |
-      {
-        "log-driver": "json-file",
-        "log-opts": {
-          "max-size": "{{ docker_log_max_size }}",
-          "max-file": "{{ docker_log_max_file }}"
-        },
-        "storage-driver": "overlay2"
-      }
+  ansible.builtin.template:
+    src: daemon.json.j2
     dest: /etc/docker/daemon.json
     mode: "0644"
   register: docker_daemon_config

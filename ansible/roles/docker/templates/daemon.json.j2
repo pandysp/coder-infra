@@ -1,0 +1,14 @@
+{
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "{{ docker_log_max_size }}",
+    "max-file": "{{ docker_log_max_file }}"
+  },
+  "storage-driver": "overlay2"{% if sysbox_enabled | default(false) %},
+  "runtimes": {
+    "sysbox-runc": {
+      "path": "/usr/bin/sysbox-runc"
+    }
+  }
+{% endif %}
+}

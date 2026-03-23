@@ -8,35 +8,28 @@ import { generateUserData } from "./user-data";
 
 const config = new pulumi.Config();
 
-// Configuration with defaults
 const serverName: string = config.get("serverName") || "coder-dev";
 const serverType: string = config.get("serverType") || "cx33";
 const serverLocation: string = config.get("serverLocation") || "fsn1";
 
-// Required config
 const tailscaleAuthKey: pulumi.Output<string> = config.requireSecret("tailscaleAuthKey");
 const coderAdminEmail: string = config.require("coderAdminEmail");
 const claudeSetupToken: pulumi.Output<string> = config.requireSecret("claudeSetupToken");
 const anthropicApiKey: pulumi.Output<string> = config.requireSecret("anthropicApiKey");
-
-// Optional config
 const githubToken: pulumi.Output<string> = config.getSecret("githubToken") ?? pulumi.output("");
 
-// Generate ED25519 deploy key
 const deployKey = new tls.PrivateKey("deploy-key", {
     algorithm: "ED25519",
 });
 
-// Create firewall (no inbound on public IP — all access via Tailscale)
+// No inbound on public IP — all access via Tailscale
 const firewall = createFirewall();
 
-// Generate cloud-init for Tailscale bootstrap
 const userData = generateUserData({
     tailscaleAuthKey,
     hostname: serverName,
 });
 
-// Create Hetzner server
 const server = createServer({
     name: serverName,
     serverType,
@@ -46,7 +39,6 @@ const server = createServer({
     publicKey: deployKey.publicKeyOpenssh,
 });
 
-// Provision with Ansible via Tailscale
 // Requires: the machine running Pulumi must be on the same tailnet
 const provisionScript = path.resolve(__dirname, "..", "scripts", "provision.sh");
 
@@ -64,10 +56,8 @@ const provision = new command.local.Command(
         },
         triggers: [server.id],
     },
-    { dependsOn: [server] },
 );
 
-// Exports
 export const serverIpv4 = server.ipv4Address;
 export const hostname = serverName;
 export const deployPublicKey = deployKey.publicKeyOpenssh;

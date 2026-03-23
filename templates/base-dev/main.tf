@@ -42,15 +42,10 @@ resource "coder_agent" "main" {
     port_forwarding_helper = true
   }
 
-  env = {
-    ANTHROPIC_API_KEY = var.anthropic_api_key
-  }
-
   startup_script = <<-EOT
     #!/bin/bash
     set -e
 
-    # Install development tools if not present
     if ! command -v tmux &> /dev/null; then
       sudo apt-get update -qq
       sudo apt-get install -y -qq \
@@ -58,15 +53,14 @@ resource "coder_agent" "main" {
         ripgrep fd-find htop tree python3 python3-pip
     fi
 
-    # Install Node.js LTS if not present
     if ! command -v node &> /dev/null; then
       curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
       sudo apt-get install -y -qq nodejs
     fi
 
-    # Configure Claude Code setup token if provided
     if [ -n "${CLAUDE_SETUP_TOKEN:-}" ]; then
       npx --yes @anthropic-ai/claude-code@latest setup-token "$CLAUDE_SETUP_TOKEN" 2>/dev/null || true
+      unset CLAUDE_SETUP_TOKEN
     fi
   EOT
 

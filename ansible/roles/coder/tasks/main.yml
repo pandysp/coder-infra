@@ -23,17 +23,12 @@
   ansible.builtin.set_fact:
     docker_gid: "{{ docker_group.stdout.split(':')[2] }}"
 
-- name: Check for existing PostgreSQL password
-  ansible.builtin.stat:
-    path: "{{ coder_dir }}/.pg_password"
-  register: pg_password_file
-
-- name: Generate PostgreSQL password
+- name: Generate PostgreSQL password (only if absent)
   ansible.builtin.copy:
     content: "{{ lookup('ansible.builtin.password', '/dev/null', length=32, chars=['ascii_letters', 'digits']) }}"
     dest: "{{ coder_dir }}/.pg_password"
     mode: "0600"
-  when: not pg_password_file.stat.exists
+    force: false
 
 - name: Read PostgreSQL password
   ansible.builtin.slurp:
@@ -60,11 +55,13 @@
   ansible.builtin.command:
     cmd: docker compose up -d
     chdir: "{{ coder_dir }}"
-  changed_when: true
+  register: compose_result
+  changed_when: "'Started' in compose_result.stderr or 'Recreat' in compose_result.stderr or 'Creat' in compose_result.stderr"
 
 - name: Configure Tailscale Serve for HTTPS
   ansible.builtin.command: tailscale serve --bg --https=443 http://localhost:80
-  changed_when: true
+  register: ts_serve_result
+  changed_when: "'started' in ts_serve_result.stdout or ts_serve_result.rc != 0"
 
 - name: Wait for Coder to be ready
   ansible.builtin.uri:

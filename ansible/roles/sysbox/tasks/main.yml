@@ -6,54 +6,38 @@
       - rsync
     state: present
 
-- name: Check if Sysbox is installed
-  ansible.builtin.command: dpkg -l sysbox-ce
-  register: sysbox_check
+- name: Check installed Sysbox version
+  ansible.builtin.shell: dpkg-query -W -f='${Version}' sysbox-ce 2>/dev/null || echo "not-installed"
+  register: sysbox_installed_version
   changed_when: false
-  failed_when: false
+
+- name: Set Sysbox install needed fact
+  ansible.builtin.set_fact:
+    sysbox_needs_install: "{{ sysbox_installed_version.stdout != sysbox_version + '-0' }}"
 
 - name: Download Sysbox package
   ansible.builtin.get_url:
     url: "https://downloads.nestybox.com/sysbox/releases/v{{ sysbox_version }}/sysbox-ce_{{ sysbox_version }}-0.linux_amd64.deb"
     dest: /tmp/sysbox.deb
     mode: "0644"
-  when: sysbox_check.rc != 0
+  when: sysbox_needs_install
 
 - name: Stop Docker before Sysbox install
   ansible.builtin.systemd:
     name: docker
     state: stopped
-  when: sysbox_check.rc != 0
+  when: sysbox_needs_install
 
 - name: Install Sysbox
   ansible.builtin.apt:
     deb: /tmp/sysbox.deb
     state: present
-  when: sysbox_check.rc != 0
+  when: sysbox_needs_install
 
 - name: Clean up Sysbox package
   ansible.builtin.file:
     path: /tmp/sysbox.deb
     state: absent
-
-- name: Update Docker daemon config with Sysbox runtime
-  ansible.builtin.copy:
-    content: |
-      {
-        "log-driver": "json-file",
-        "log-opts": {
-          "max-size": "{{ docker_log_max_size }}",
-          "max-file": "{{ docker_log_max_file }}"
-        },
-        "storage-driver": "overlay2",
-        "runtimes": {
-          "sysbox-runc": {
-            "path": "/usr/bin/sysbox-runc"
-          }
-        }
-      }
-    dest: /etc/docker/daemon.json
-    mode: "0644"
 
 - name: Enable Sysbox services
   ansible.builtin.systemd:
@@ -64,7 +48,8 @@
     - sysbox-mgr
     - sysbox-fs
 
-- name: Start Docker with Sysbox runtime
+- name: Start Docker after Sysbox install
   ansible.builtin.systemd:
     name: docker
     state: started
+  when: sysbox_needs_install

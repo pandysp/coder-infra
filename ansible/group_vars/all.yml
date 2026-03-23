@@ -9,6 +9,7 @@ docker_log_max_file: "3"
 
 # Sysbox
 sysbox_version: "0.6.6"
+sysbox_enabled: true
 
 # Coder
 coder_dir: /opt/coder

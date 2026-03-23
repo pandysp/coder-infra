@@ -11,10 +11,11 @@ ANSIBLE_DIR="${SCRIPT_DIR}/../ansible"
 : "${CLAUDE_SETUP_TOKEN:?CLAUDE_SETUP_TOKEN is required}"
 : "${ANTHROPIC_API_KEY:?ANTHROPIC_API_KEY is required}"
 
-# Write SSH key to temp file
+# Write SSH key and secrets to temp files
 SSH_KEY_FILE=$(mktemp)
 INVENTORY_FILE=$(mktemp)
-trap 'rm -f "${SSH_KEY_FILE}" "${INVENTORY_FILE}"' EXIT
+VARS_FILE=$(mktemp)
+trap 'rm -f "${SSH_KEY_FILE}" "${INVENTORY_FILE}" "${VARS_FILE}"' EXIT
 
 echo "${SSH_PRIVATE_KEY}" > "${SSH_KEY_FILE}"
 chmod 600 "${SSH_KEY_FILE}"
@@ -50,20 +51,25 @@ EOF
 
 # Install Ansible Galaxy requirements
 cd "${ANSIBLE_DIR}"
-ansible-galaxy collection install -r requirements.yml --force 2>/dev/null || true
+ansible-galaxy collection install -r requirements.yml 2>/dev/null || true
 
-# Run Ansible playbook (secrets passed as extra-vars, never written to disk)
+# Write secrets to temp vars file (avoids exposing them in process list via -e)
+cat > "${VARS_FILE}" <<EOF
+server_name: "${SERVER_NAME}"
+coder_admin_email: "${CODER_ADMIN_EMAIL}"
+claude_setup_token: "${CLAUDE_SETUP_TOKEN}"
+anthropic_api_key: "${ANTHROPIC_API_KEY}"
+github_token: "${GITHUB_TOKEN:-}"
+EOF
+chmod 600 "${VARS_FILE}"
+
 ansible-playbook playbook.yml \
     -i "${INVENTORY_FILE}" \
-    -e "server_name=${SERVER_NAME}" \
-    -e "coder_admin_email=${CODER_ADMIN_EMAIL}" \
-    -e "claude_setup_token=${CLAUDE_SETUP_TOKEN}" \
-    -e "anthropic_api_key=${ANTHROPIC_API_KEY}" \
-    -e "github_token=${GITHUB_TOKEN:-}"
+    -e "@${VARS_FILE}"
 
-# Shred cloud-init log (contains the Tailscale auth key)
+# Shred cloud-init logs (contain the Tailscale auth key)
 ssh -o StrictHostKeyChecking=no -i "${SSH_KEY_FILE}" root@"${SERVER_NAME}" \
-    "shred -u /var/log/cloud-init-output.log 2>/dev/null || true"
+    "shred -u /var/log/cloud-init-coder.log /var/log/cloud-init-output.log 2>/dev/null || true"
 
 echo "Provisioning complete."
 TAILSCALE_FQDN=$(ssh -o StrictHostKeyChecking=no -i "${SSH_KEY_FILE}" root@"${SERVER_NAME}" \
