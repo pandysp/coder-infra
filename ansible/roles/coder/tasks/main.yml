@@ -58,10 +58,16 @@
   register: compose_result
   changed_when: "'Started' in compose_result.stderr or 'Recreat' in compose_result.stderr or 'Creat' in compose_result.stderr"
 
+- name: Check Tailscale Serve status
+  ansible.builtin.shell: tailscale serve status 2>&1 | grep -q 'proxy http://localhost:80'
+  register: ts_serve_check
+  changed_when: false
+  failed_when: false
+
 - name: Configure Tailscale Serve for HTTPS
   ansible.builtin.command: tailscale serve --bg --https=443 http://localhost:80
-  register: ts_serve_result
-  changed_when: "'started' in ts_serve_result.stdout or ts_serve_result.rc != 0"
+  when: ts_serve_check.rc != 0
+  changed_when: true
 
 - name: Wait for Coder to be ready
   ansible.builtin.uri:
