@@ -16,14 +16,24 @@ validate-ansible: ## Validate Ansible playbook (installs Galaxy deps first)
 lint: validate ## Alias for validate
 
 # --- Template push (dereferences symlinks for shared module) -----------------
+# Clean .terraform to avoid uploading darwin provider binaries (~18MB) to the
+# linux server. The Coder provisioner re-downloads the correct platform binaries.
+# Template variables are read from terraform.tfvars (claude_setup_token is
+# required for Claude Code auth in workspaces).
+
+TFVARS := terraform/terraform.tfvars
+SETUP_TOKEN := $(shell grep claude_setup_token $(TFVARS) 2>/dev/null | sed 's/.*= *"//;s/"//')
+TEMPLATE_VARS := --variable "claude_setup_token=$(SETUP_TOKEN)" --variable "anthropic_api_key="
 
 push-templates: push-base-dev push-docker-dev ## Push all Coder templates
 
 push-base-dev: ## Push base-dev template to Coder
-	tar -cvh -C templates/base-dev . | coder templates push base-dev -d - -y
+	rm -rf templates/base-dev/.terraform
+	tar -cvh -C templates/base-dev . | coder templates push base-dev -d - -y $(TEMPLATE_VARS)
 
 push-docker-dev: ## Push docker-dev template to Coder
-	tar -cvh -C templates/docker-dev . | coder templates push docker-dev -d - -y
+	rm -rf templates/docker-dev/.terraform
+	tar -cvh -C templates/docker-dev . | coder templates push docker-dev -d - -y $(TEMPLATE_VARS)
 
 # --- Provisioning ------------------------------------------------------------
 
