@@ -169,7 +169,6 @@ resource "docker_container" "workspace" {
   image    = "codercom/enterprise-base:ubuntu"
   name     = "coder-${data.coder_workspace_owner.me.name}-${lower(data.coder_workspace.me.name)}"
   hostname = data.coder_workspace.me.name
-  dns      = ["1.1.1.1"]
   runtime  = var.enable_docker_in_docker ? "sysbox-runc" : null
 
   cpu_shares = data.coder_parameter.cpu.value * 1024
