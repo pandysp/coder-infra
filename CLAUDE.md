@@ -106,7 +106,7 @@ force_reprovision — change to re-run Ansible without server replacement
 11. Workspace containers use chained `replace()`: first rewrites the external Coder access URL → `http://host.docker.internal:80`, then replaces remaining `localhost/127.0.0.1` references
 12. DNS: `["100.100.100.100", "1.1.1.1"]` — MagicDNS for Tailscale names, Cloudflare for internet
 13. Template uses `coder_script` resources instead of monolithic `startup_script` for per-step dashboard progress
-14. Claude-code module v4.8.2 handles auth via `coder_env` (not Docker container env vars); uses `claude_code_oauth_token`
+14. Claude-code module v4.9.1 handles auth via `coder_env` (not Docker container env vars); uses `claude_code_oauth_token`
 15. `coder_task` + `coder_ai_task` wire Claude Code into the Tasks UI for fire-and-forget background agents
 16. Web preview app slug `"preview"` (magic slug) enables Tasks UI preview navbar
 17. GitHub external auth is server-side config (`CODER_EXTERNAL_AUTH_0_*` env vars) + template-side `data.coder_external_auth`
