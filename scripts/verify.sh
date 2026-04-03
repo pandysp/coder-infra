@@ -7,12 +7,16 @@ echo "=== Verifying deployment: ${SERVER_NAME} ==="
 echo ""
 
 echo "1. Tailscale connectivity..."
-# --timeout is not supported on all platforms (e.g., macOS); use -c 1 if available
-tailscale ping -c 1 "${SERVER_NAME}" 2>/dev/null || tailscale ping "${SERVER_NAME}" &
-PING_PID=$!
-sleep 3
-kill "${PING_PID}" 2>/dev/null || true
-wait "${PING_PID}" 2>/dev/null || true
+if ! tailscale ping -c 1 "${SERVER_NAME}" 2>/dev/null; then
+    # -c flag not supported (e.g., macOS); run with timeout via background + kill
+    tailscale ping "${SERVER_NAME}" &
+    PING_PID=$!
+    sleep 3
+    if kill -0 "${PING_PID}" 2>/dev/null; then
+        kill "${PING_PID}" 2>/dev/null || true
+        wait "${PING_PID}" 2>/dev/null || true
+    fi
+fi
 echo "   OK"
 echo ""
 

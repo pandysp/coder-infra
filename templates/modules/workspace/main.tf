@@ -13,7 +13,6 @@ data "coder_provisioner" "me" {}
 data "coder_workspace" "me" {}
 data "coder_workspace_owner" "me" {}
 
-# --- Workspace parameters (shown in Coder UI at workspace creation) ----------
 
 data "coder_parameter" "cpu" {
   name         = "cpu"
@@ -60,7 +59,6 @@ data "coder_parameter" "web_preview_port" {
   }
 }
 
-# --- Agent -------------------------------------------------------------------
 
 locals {
   base_startup = <<-EOT
@@ -155,7 +153,6 @@ resource "coder_app" "web_preview" {
   share        = "owner"
 }
 
-# --- Container ---------------------------------------------------------------
 
 resource "docker_volume" "home" {
   name = "coder-${data.coder_workspace.me.id}-home"

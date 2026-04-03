@@ -1,6 +1,6 @@
 .PHONY: validate lint push-templates push-base-dev push-docker-dev
 
-# --- Validation (GH #5: ensures Galaxy collections are installed first) ------
+# --- Validation --------------------------------------------------------------
 
 validate: validate-terraform validate-ansible ## Run all validation checks
 

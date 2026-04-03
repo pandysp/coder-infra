@@ -66,7 +66,7 @@ fi
 # Once connected, we can SSH via the Tailscale hostname.
 echo "Waiting for ${SERVER_NAME} to appear on tailnet..."
 for i in $(seq 1 60); do
-    if tailscale ping "${SERVER_NAME}" --timeout=5s 2>/dev/null; then
+    if tailscale ping -c 1 "${SERVER_NAME}" 2>/dev/null || tailscale ping "${SERVER_NAME}" --timeout=5s 2>/dev/null; then
         echo "Device is reachable via Tailscale."
         break
     fi
