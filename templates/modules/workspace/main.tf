@@ -93,6 +93,14 @@ data "coder_parameter" "claude_permission" {
   }
 }
 
+# Enables "Connect GitHub" button in the Coder UI for OAuth-based git operations.
+# No HCL consumers needed — the Coder agent uses the token via GIT_ASKPASS.
+# Requires CODER_EXTERNAL_AUTH_0_ID="github" on the Coder server.
+data "coder_external_auth" "github" {
+  id       = "github"
+  optional = true
+}
+
 resource "coder_agent" "main" {
   arch = data.coder_provisioner.me.arch
   os   = "linux"
@@ -238,7 +246,7 @@ resource "docker_volume" "home" {
 
 resource "docker_container" "workspace" {
   count    = data.coder_workspace.me.start_count
-  image    = "codercom/enterprise-base:ubuntu"
+  image    = "codercom/enterprise-base@sha256:5abfb835c2421f89d5a30fe42bfa369de91222f3e13145172448d9fd173676de"
   name     = "coder-${data.coder_workspace_owner.me.name}-${lower(data.coder_workspace.me.name)}"
   hostname = data.coder_workspace.me.name
   dns      = ["100.100.100.100", "1.1.1.1"]
