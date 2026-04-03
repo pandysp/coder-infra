@@ -16,6 +16,8 @@ coder_dir: /opt/coder
 coder_image: "ghcr.io/coder/coder:v2.31.7"
 coder_postgres_image: "postgres:16-alpine"
 coder_caddy_image: "caddy:2-alpine"
+coder_domain: ""
+cloudflare_api_token: ""
 
 # GitHub External Auth (optional — requires a GitHub OAuth App)
 github_oauth_client_id: ""

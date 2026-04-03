@@ -1,3 +1,12 @@
+{% if coder_domain | default('') | length > 0 %}
+{{ coder_domain }}, *.{{ coder_domain }} {
+    reverse_proxy coder:7080
+    tls {
+        dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+    }
+}
+{% endif %}
+
 :80 {
     reverse_proxy coder:7080
 }

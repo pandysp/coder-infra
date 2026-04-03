@@ -10,6 +10,7 @@
 - A [Hetzner Cloud](https://www.hetzner.com/cloud) account with API token
 - A Tailscale auth key (reusable, ephemeral) from the [admin console](https://login.tailscale.com/admin/settings/keys)
 - A Claude Code setup token (run `claude setup-token` locally)
+- A Cloudflare account with DNS control for your zone (optional, only if you want a custom domain)
 
 ## 1. Clone and Configure
 
@@ -58,7 +59,7 @@ This will:
 3. Wait for the server to appear on your tailnet
 4. Run Ansible to configure Docker, Sysbox, and Coder
 5. Start Coder via Docker Compose behind Caddy
-6. Configure Tailscale Serve for HTTPS
+6. Either configure Tailscale Serve for HTTPS or, when `coder_domain` is set, build Caddy with Cloudflare DNS-01 and wildcard subdomain routing
 7. Shred cloud-init artifacts containing secrets
 
 ## 3. Verify
@@ -68,7 +69,7 @@ cd ..
 bash scripts/verify.sh
 ```
 
-This checks Tailscale connectivity, SSH access, Docker, Sysbox, Coder API, and Tailscale Serve.
+This checks Tailscale connectivity, SSH access, Docker, Sysbox, Coder API, and whichever routing mode is active (`tailscale serve` or custom-domain TLS on `443`).
 
 ## 4. Complete Coder Setup
 
@@ -95,7 +96,7 @@ This uses `tar -cvh` to dereference the shared module symlinks before pushing to
 coder create my-workspace --template base-dev
 ```
 
-The Coder UI will prompt for workspace parameters (CPU cores, memory, web preview port).
+The Coder UI will prompt for workspace parameters (CPU cores, memory, repo, branch, Claude mode, web preview port).
 
 ## Workspace Parameters
 
@@ -105,9 +106,20 @@ Both templates expose these parameters, configurable per-workspace:
 |-----------|---------|-------|-------------|
 | CPU Cores | 2 | 1-4 | CPU scheduling weight (relative, via `cpu_shares`) |
 | Memory (GB) | 4 | 1-8 | Container memory limit |
+| Repository URL | (empty) | empty, `https://...`, or `git@...` | Git repo to clone into workspace |
+| Repository Branch | (empty) | any string | Branch passed to the git clone module when a repository URL is set |
+| Claude Permission | bypassPermissions | default/acceptEdits/bypassPermissions | Permission level for Claude Code |
 | Web Preview Port | 3000 | 1024-65535 | Port for the web preview app |
-| Repository URL | (empty) | any URL | Git repo to clone into workspace |
-| Claude Permission | default | default/acceptEdits/bypassPermissions | Permission level for Claude Code |
+
+## Workspace Presets
+
+The shared workspace module defines three presets so users can pick a sane resource/profile bundle without filling every field manually:
+
+| Preset | CPU | Memory | Claude Mode | Notes |
+|--------|-----|--------|-------------|-------|
+| Quick Task | 1 | 2 GB | `bypassPermissions` | Default preset for fast, low-overhead tasks |
+| Full Development | 3 | 6 GB | `acceptEdits` | Higher-resource preset for active coding sessions |
+| Autonomous Agent | 2 | 4 GB | `bypassPermissions` | Balanced preset for longer autonomous runs |
 
 ## GitHub External Auth (Optional)
 
@@ -125,6 +137,46 @@ github_oauth_client_secret = "<your-client-secret>"
 4. Re-provision: `cd terraform && tofu apply`
 
 After re-provisioning, users can connect their GitHub account via the Coder dashboard under Settings > External Auth.
+
+## Custom Domain (Optional)
+
+To enable wildcard subdomain routing for apps like code-server and Web Preview, point a custom domain at the server's Tailscale IP and let Caddy terminate TLS with Cloudflare DNS-01.
+
+1. In Cloudflare DNS, create two `A` records in DNS-only mode:
+   - `coder.spannagel.dev` -> `<tailscale-ip>`
+   - `*.coder.spannagel.dev` -> `<tailscale-ip>`
+2. Add these variables to `terraform.tfvars`:
+
+```hcl
+coder_domain         = "coder.spannagel.dev"
+cloudflare_api_token = "<cloudflare-token-with-zone-dns-edit>"
+```
+
+3. Re-provision so Ansible rebuilds Caddy with the Cloudflare DNS plugin:
+
+```hcl
+# terraform.tfvars
+force_reprovision = "2026-04-03-custom-domain"
+```
+
+```bash
+cd terraform
+tofu apply
+```
+
+When `coder_domain` is set, Coder uses `https://coder.spannagel.dev`, Caddy binds `443` directly, and Tailscale Serve is disabled.
+
+## MCP Server (Optional)
+
+Coder can expose an MCP server so local Claude Code or Claude Desktop sessions can inspect and manage your remote workspaces without SSHing into the server manually.
+
+Configure it from a logged-in machine with:
+
+```bash
+coder exp mcp configure claude-code
+```
+
+This feature is currently beta. Expect roughly 5,900 tokens of tool overhead per turn, so it is useful when local orchestration matters and unnecessary when you are already working inside the Coder workspace itself.
 
 ## Tasks UI
 
@@ -157,9 +209,9 @@ coder tokens create
 
 Workspace containers run on the Docker bridge network and cannot reach the Tailscale FQDN directly. The template handles this with three mechanisms:
 
-1. **Caddy binds to `0.0.0.0:80`** so workspace containers can reach it via the Docker bridge gateway (`host.docker.internal`). External access is blocked by the Hetzner cloud firewall (no inbound rules). Note: Docker port publishing bypasses UFW via iptables NAT rules, so the Hetzner firewall is the sole perimeter control for port 80.
+1. **Caddy binds to `0.0.0.0:80`** so workspace containers can reach it via the Docker bridge gateway (`host.docker.internal`). When `coder_domain` is set, Caddy also binds `0.0.0.0:443` and handles TLS itself; otherwise Tailscale Serve terminates HTTPS on `443`. External access is blocked by the Hetzner cloud firewall (no inbound rules). Note: Docker port publishing bypasses UFW via iptables NAT rules, so the Hetzner firewall is the sole perimeter control for port 80/443.
 
-2. **Init script URL rewriting**: The Coder agent init script references `CODER_ACCESS_URL` (a Tailscale FQDN). The template's `replace()` rewrites this to `http://host.docker.internal:80` so the agent can download and connect through Caddy.
+2. **Init script URL rewriting**: The Coder agent init script references `CODER_ACCESS_URL` (Tailscale FQDN by default, custom domain when enabled). The template's `replace()` rewrites this to `http://host.docker.internal:80` so the agent can download and connect through Caddy.
 
 3. **Dual DNS**: Containers use `100.100.100.100` (Tailscale MagicDNS) for Tailscale name resolution and `1.1.1.1` (Cloudflare) for internet DNS.
 

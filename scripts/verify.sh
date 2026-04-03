@@ -23,6 +23,21 @@ echo "2. SSH access + remote checks..."
 if ! REMOTE_OUTPUT=$(ssh -o ConnectTimeout=10 root@"${SERVER_NAME}" bash <<'CHECKS' 2>&1
 set -euo pipefail
 
+COMPOSE_FILE="/opt/coder/docker-compose.yml"
+ACCESS_URL=""
+CUSTOM_DOMAIN_CONFIGURED=""
+
+if [ -f "${COMPOSE_FILE}" ]; then
+    ACCESS_URL=$(awk -F'"' '/CODER_ACCESS_URL:/ {print $2; exit}' "${COMPOSE_FILE}")
+    if grep -q 'CODER_WILDCARD_ACCESS_URL:' "${COMPOSE_FILE}"; then
+        CUSTOM_DOMAIN_CONFIGURED="true"
+    fi
+fi
+
+if [ -z "${CUSTOM_DOMAIN_CONFIGURED}" ] && ss -ltn | grep -q ':443 '; then
+    CUSTOM_DOMAIN_CONFIGURED="true"
+fi
+
 echo "=== SSH OK ==="
 
 echo "=== DOCKER ==="
@@ -34,8 +49,24 @@ docker info --format '{{json .Runtimes}}' | jq -r 'if ."sysbox-runc" then "OK" e
 echo "=== CODER ==="
 curl -sf http://localhost:80/api/v2/buildinfo | jq -r '.version'
 
-echo "=== SERVE ==="
-tailscale serve status 2>&1 | head -5
+echo "=== ROUTING_MODE ==="
+if [ -n "${CUSTOM_DOMAIN_CONFIGURED}" ]; then
+    echo "custom-domain"
+else
+    echo "tailscale-serve"
+fi
+
+echo "=== ROUTING ==="
+if [ -n "${CUSTOM_DOMAIN_CONFIGURED}" ]; then
+    curl -sf https://localhost:443/api/v2/buildinfo -k | jq -r '"HTTPS on 443: Coder " + .version'
+else
+    tailscale serve status 2>&1 | head -5
+fi
+
+echo "=== ACCESS_URL ==="
+if [ -n "${ACCESS_URL}" ]; then
+    echo "${ACCESS_URL}"
+fi
 
 echo "=== FQDN ==="
 tailscale status --json | jq -r '.Self.DNSName' | sed 's/\.$//'
@@ -61,13 +92,25 @@ echo ""
 
 echo "5. Coder API..."
 echo -n "   Coder "
-echo "$REMOTE_OUTPUT" | sed -n '/=== CODER ===/,/=== SERVE ===/{ /===/d; p; }'
+echo "$REMOTE_OUTPUT" | sed -n '/=== CODER ===/,/=== ROUTING_MODE ===/{ /===/d; p; }'
 echo ""
 
-echo "6. Tailscale Serve..."
-echo "$REMOTE_OUTPUT" | sed -n '/=== SERVE ===/,/=== FQDN ===/{ /===/d; p; }'
+ROUTING_MODE=$(echo "$REMOTE_OUTPUT" | sed -n '/=== ROUTING_MODE ===/,/=== ROUTING ===/{ /===/d; p; }' | head -1)
+
+if [ "${ROUTING_MODE}" = "custom-domain" ]; then
+    echo "6. Custom domain routing..."
+else
+    echo "6. Tailscale Serve..."
+fi
+echo "$REMOTE_OUTPUT" | sed -n '/=== ROUTING ===/,/=== ACCESS_URL ===/{ /===/d; p; }'
 echo ""
 
-TAILSCALE_FQDN=$(echo "$REMOTE_OUTPUT" | sed -n '/=== FQDN ===/,$ { /===/d; p; }')
+ACCESS_URL=$(echo "$REMOTE_OUTPUT" | sed -n '/=== ACCESS_URL ===/,/=== FQDN ===/{ /===/d; p; }' | head -1)
+TAILSCALE_FQDN=$(echo "$REMOTE_OUTPUT" | sed -n '/=== FQDN ===/,$ { /===/d; p; }' | head -1)
+
+if [ -z "${ACCESS_URL}" ]; then
+    ACCESS_URL="https://${TAILSCALE_FQDN}"
+fi
+
 echo "=== All checks passed ==="
-echo "Coder URL: https://${TAILSCALE_FQDN}"
+echo "Coder URL: ${ACCESS_URL}"

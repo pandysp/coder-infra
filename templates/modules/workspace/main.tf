@@ -22,6 +22,8 @@ data "coder_parameter" "cpu" {
   type         = "number"
   default      = "2"
   mutable      = true
+  form_type    = "slider"
+  order        = 1
   icon         = "/icon/memory.svg"
 
   validation {
@@ -37,6 +39,8 @@ data "coder_parameter" "memory" {
   type         = "number"
   default      = "4"
   mutable      = true
+  form_type    = "slider"
+  order        = 2
   icon         = "/icon/memory.svg"
 
   validation {
@@ -52,6 +56,7 @@ data "coder_parameter" "web_preview_port" {
   type         = "number"
   default      = "3000"
   mutable      = true
+  order        = 6
   icon         = "/icon/globe.svg"
 
   validation {
@@ -67,6 +72,23 @@ data "coder_parameter" "repo_url" {
   type         = "string"
   default      = ""
   mutable      = false
+  order        = 3
+  icon         = "/icon/git.svg"
+
+  validation {
+    regex = "^(|https://.+|git@.+)$"
+    error = "Repository URL must be empty or start with https:// or git@"
+  }
+}
+
+data "coder_parameter" "repo_branch" {
+  name         = "repo_branch"
+  display_name = "Repository Branch"
+  description  = "Git branch to clone when a repository URL is provided"
+  type         = "string"
+  default      = ""
+  mutable      = true
+  order        = 4
   icon         = "/icon/git.svg"
 }
 
@@ -77,6 +99,8 @@ data "coder_parameter" "claude_permission" {
   type         = "string"
   default      = "bypassPermissions"
   mutable      = true
+  form_type    = "radio"
+  order        = 5
   icon         = "/icon/coder.svg"
 
   option {
@@ -90,6 +114,46 @@ data "coder_parameter" "claude_permission" {
   option {
     name  = "Default (ask for approval)"
     value = "default"
+  }
+}
+
+data "coder_workspace_preset" "quick_task" {
+  name        = "Quick Task"
+  description = "Low-resource default for fast one-off work."
+  default     = true
+  parameters = {
+    (data.coder_parameter.cpu.name)               = "1"
+    (data.coder_parameter.memory.name)            = "2"
+    (data.coder_parameter.web_preview_port.name)  = "3000"
+    (data.coder_parameter.repo_url.name)          = ""
+    (data.coder_parameter.repo_branch.name)       = ""
+    (data.coder_parameter.claude_permission.name) = "bypassPermissions"
+  }
+}
+
+data "coder_workspace_preset" "full_development" {
+  name        = "Full Development"
+  description = "Higher-resource preset for active coding sessions."
+  parameters = {
+    (data.coder_parameter.cpu.name)               = "3"
+    (data.coder_parameter.memory.name)            = "6"
+    (data.coder_parameter.web_preview_port.name)  = "3000"
+    (data.coder_parameter.repo_url.name)          = ""
+    (data.coder_parameter.repo_branch.name)       = ""
+    (data.coder_parameter.claude_permission.name) = "acceptEdits"
+  }
+}
+
+data "coder_workspace_preset" "autonomous_agent" {
+  name        = "Autonomous Agent"
+  description = "Balanced preset for longer autonomous Claude runs."
+  parameters = {
+    (data.coder_parameter.cpu.name)               = "2"
+    (data.coder_parameter.memory.name)            = "4"
+    (data.coder_parameter.web_preview_port.name)  = "3000"
+    (data.coder_parameter.repo_url.name)          = ""
+    (data.coder_parameter.repo_branch.name)       = ""
+    (data.coder_parameter.claude_permission.name) = "bypassPermissions"
   }
 }
 
@@ -165,6 +229,13 @@ resource "coder_script" "system_setup" {
       sudo apt-get update -qq
       sudo apt-get install -y -qq ripgrep fd-find tree
     fi
+    if ! command -v gh &> /dev/null; then
+      curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+      ARCH="$(dpkg --print-architecture)"
+      echo "deb [arch=$ARCH signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+      sudo apt-get update -qq
+      sudo apt-get install -y -qq gh
+    fi
     if ! command -v node &> /dev/null; then
       curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
       sudo apt-get install -y -qq nodejs
@@ -199,13 +270,13 @@ resource "coder_script" "docker_cli" {
 }
 
 module "claude_code" {
-  source                  = "registry.coder.com/coder/claude-code/coder"
-  version                 = "4.9.1"
-  agent_id                = coder_agent.main.id
-  workdir                 = "/home/coder"
-  claude_code_oauth_token = var.claude_setup_token
-  claude_api_key          = var.anthropic_api_key
-  ai_prompt               = data.coder_task.me.prompt
+  source                       = "registry.coder.com/coder/claude-code/coder"
+  version                      = "4.9.1"
+  agent_id                     = coder_agent.main.id
+  workdir                      = "/home/coder"
+  claude_code_oauth_token      = var.claude_setup_token
+  claude_api_key               = var.anthropic_api_key
+  ai_prompt                    = data.coder_task.me.prompt
   permission_mode              = data.coder_parameter.claude_permission.value
   dangerously_skip_permissions = data.coder_parameter.claude_permission.value == "bypassPermissions"
   cli_app                      = true
@@ -228,12 +299,25 @@ module "dotfiles" {
   agent_id = coder_agent.main.id
 }
 
+module "code_server" {
+  count          = data.coder_workspace.me.start_count
+  source         = "registry.coder.com/coder/code-server/coder"
+  version        = "1.4.4"
+  agent_id       = coder_agent.main.id
+  folder         = "/home/coder"
+  install_prefix = "/home/coder/.code-server"
+  use_cached     = true
+  subdomain      = true
+  order          = 1
+}
+
 module "git_clone" {
-  count    = data.coder_parameter.repo_url.value != "" ? 1 : 0
-  source   = "registry.coder.com/coder/git-clone/coder"
-  version  = "1.2.3"
-  agent_id = coder_agent.main.id
-  url      = data.coder_parameter.repo_url.value
+  count       = data.coder_parameter.repo_url.value != "" ? 1 : 0
+  source      = "registry.coder.com/coder/git-clone/coder"
+  version     = "1.2.3"
+  agent_id    = coder_agent.main.id
+  url         = data.coder_parameter.repo_url.value
+  branch_name = data.coder_parameter.repo_branch.value
 }
 
 resource "coder_ai_task" "claude" {
@@ -270,7 +354,7 @@ resource "docker_container" "workspace" {
   name     = "coder-${data.coder_workspace_owner.me.name}-${lower(data.coder_workspace.me.name)}"
   hostname = data.coder_workspace.me.name
   dns      = ["100.100.100.100", "1.1.1.1"]
-  runtime = var.enable_docker_in_docker ? "sysbox-runc" : null
+  runtime  = var.enable_docker_in_docker ? "sysbox-runc" : null
 
   stop_timeout          = 300
   destroy_grace_seconds = 300

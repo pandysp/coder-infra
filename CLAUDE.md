@@ -15,10 +15,10 @@ OSS reference setup for solo developers who want persistent remote CC sessions w
 ## Architecture
 ```
 Hetzner CX33 (4 vCPU, 8GB RAM, 100GB NVMe, Ubuntu 24.04)
-  ├── Tailscale (networking, HTTPS via Serve)
+  ├── Tailscale (networking, zero-trust access)
   ├── Docker + Sysbox (container runtimes)
-  └── Coder (Docker Compose: coder + postgres + caddy)
-        ├── Workspace template: base-dev (Tasks + CC + dotfiles + git-clone + Node.js)
+  └── Coder (Docker Compose: coder + postgres + Caddy (TLS via Cloudflare or Tailscale Serve))
+        ├── Workspace template: base-dev (Tasks + CC + code-server + dotfiles + git-clone + Node.js)
         └── Workspace template: docker-dev (base-dev + DinD via Sysbox)
 ```
 
@@ -60,7 +60,8 @@ coder-infra/
 │       ├── coder/                    # Coder via Docker Compose
 │       │   ├── tasks/main.yml
 │       │   ├── templates/docker-compose.yml.j2
-│       │   └── templates/Caddyfile.j2
+│       │   ├── templates/Caddyfile.j2
+│       │   └── templates/Dockerfile.caddy
 │       └── mosh/tasks/main.yml       # Mosh server (optional)
 ├── Makefile                          # validate, lint, push-templates, verify
 ├── templates/                        # Coder workspace templates (Terraform)
@@ -86,6 +87,8 @@ server_location — DC location (default: "fsn1")
 coder_admin_email — admin user email
 github_oauth_client_id (optional) — GitHub OAuth App client ID for external auth
 github_oauth_client_secret (sensitive, optional) — GitHub OAuth App client secret
+coder_domain (optional) — Custom Coder domain that enables wildcard subdomain routing
+cloudflare_api_token (sensitive, optional) — Cloudflare DNS token for ACME DNS-01 when coder_domain is set
 force_reprovision — change to re-run Ansible without server replacement
 ```
 
@@ -100,7 +103,7 @@ force_reprovision — change to re-run Ansible without server replacement
 8. `force_reprovision` variable for secret rotation without server replacement
 9. Destroy-time provisioner runs `tailscale logout` (graceful fallback if SSH fails)
 10. Workspace templates use shared module via symlinks; push with `make push-templates` (tar -cvh dereferences)
-11. Workspace containers use chained `replace()`: first rewrites Tailscale FQDN → `http://host.docker.internal:80`, then replaces remaining `localhost/127.0.0.1` references
+11. Workspace containers use chained `replace()`: first rewrites the external Coder access URL → `http://host.docker.internal:80`, then replaces remaining `localhost/127.0.0.1` references
 12. DNS: `["100.100.100.100", "1.1.1.1"]` — MagicDNS for Tailscale names, Cloudflare for internet
 13. Template uses `coder_script` resources instead of monolithic `startup_script` for per-step dashboard progress
 14. Claude-code module v4.8.2 handles auth via `coder_env` (not Docker container env vars); uses `claude_code_oauth_token`
@@ -108,6 +111,10 @@ force_reprovision — change to re-run Ansible without server replacement
 16. Web preview app slug `"preview"` (magic slug) enables Tasks UI preview navbar
 17. GitHub external auth is server-side config (`CODER_EXTERNAL_AUTH_0_*` env vars) + template-side `data.coder_external_auth`
 18. `resources_monitoring` on `coder_agent` provides memory/disk threshold alerts without custom scripts
+19. Caddy TLS is conditional: default installs use Tailscale Serve on `443`; setting `coder_domain` switches to Caddy on `443` with Cloudflare DNS-01 and `CODER_WILDCARD_ACCESS_URL`
+20. Workspace templates use dynamic parameters (`form_type`, `order`, regex validation) instead of splitting simple UX differences into separate templates
+21. `data "coder_workspace_preset"` defines Quick Task, Full Development, and Autonomous Agent with all parameter values explicit
+22. `module "code_server"` adds a browser IDE app on a subdomain alongside Claude Code and Web Preview
 
 ## Coding Style
 - Terraform: HCL with consistent formatting, one resource per logical file

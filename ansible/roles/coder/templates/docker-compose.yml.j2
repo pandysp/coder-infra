@@ -22,7 +22,12 @@ services:
         condition: service_healthy
     environment:
       CODER_PG_CONNECTION_URL: "postgresql://coder:{{ coder_pg_password }}@postgres:5432/coder?sslmode=disable"
+{% if coder_domain | default('') | length > 0 %}
+      CODER_ACCESS_URL: "https://{{ coder_domain }}"
+      CODER_WILDCARD_ACCESS_URL: "*.{{ coder_domain }}"
+{% else %}
       CODER_ACCESS_URL: "https://{{ tailscale_fqdn }}"
+{% endif %}
       CODER_HTTP_ADDRESS: "0.0.0.0:7080"
       CODER_TELEMETRY_ENABLE: "false"
       # Server-side: used by Coder to auto-generate task names via Anthropic API
@@ -39,12 +44,25 @@ services:
       - "{{ docker_gid }}"
 
   caddy:
+{% if coder_domain | default('') | length > 0 %}
+    build:
+      context: .
+      dockerfile: Dockerfile.caddy
+{% else %}
     image: {{ coder_caddy_image }}
+{% endif %}
     restart: unless-stopped
     depends_on:
       - coder
+{% if coder_domain | default('') | length > 0 %}
+    environment:
+      CLOUDFLARE_API_TOKEN: "{{ cloudflare_api_token }}"
+{% endif %}
     ports:
       - "0.0.0.0:80:80"
+{% if coder_domain | default('') | length > 0 %}
+      - "0.0.0.0:443:443"
+{% endif %}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

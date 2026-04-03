@@ -58,6 +58,19 @@ variable "github_oauth_client_secret" {
   default     = ""
 }
 
+variable "coder_domain" {
+  type        = string
+  description = "Custom domain for Coder (e.g., coder.spannagel.dev). Enables wildcard subdomain routing."
+  default     = ""
+}
+
+variable "cloudflare_api_token" {
+  type        = string
+  description = "Cloudflare API token for ACME DNS-01 challenge (required when coder_domain is set)"
+  sensitive   = true
+  default     = ""
+}
+
 variable "force_reprovision" {
   type        = string
   description = "Change this value to re-run Ansible without replacing the server. Useful after rotating secrets."

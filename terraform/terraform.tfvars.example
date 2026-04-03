@@ -47,6 +47,8 @@ coder_admin_email  = "your@email.com"
 # server_location = "fsn1"
 # github_oauth_client_id     = ""   # GitHub OAuth App for external auth
 # github_oauth_client_secret = ""   # (create at github.com/settings/developers)
+# coder_domain             = ""     # Custom domain, e.g. coder.spannagel.dev
+# cloudflare_api_token     = ""     # Required for wildcard TLS when coder_domain is set
 
 # Change this value to re-run Ansible without replacing the server.
 # Useful after rotating API keys or changing Ansible config.

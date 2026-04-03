@@ -14,6 +14,8 @@ DRY_RUN="${DRY_RUN:-false}"
 ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}"
 GITHUB_OAUTH_CLIENT_ID="${GITHUB_OAUTH_CLIENT_ID:-}"
 GITHUB_OAUTH_CLIENT_SECRET="${GITHUB_OAUTH_CLIENT_SECRET:-}"
+CODER_DOMAIN="${CODER_DOMAIN:-}"
+CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN:-}"
 
 # Write SSH key and secrets to temp files
 SSH_KEY_FILE=$(mktemp)
@@ -38,6 +40,8 @@ claude_setup_token: "${CLAUDE_SETUP_TOKEN}"
 anthropic_api_key: "${ANTHROPIC_API_KEY}"
 github_oauth_client_id: "${GITHUB_OAUTH_CLIENT_ID}"
 github_oauth_client_secret: "${GITHUB_OAUTH_CLIENT_SECRET}"
+coder_domain: "${CODER_DOMAIN}"
+cloudflare_api_token: "${CLOUDFLARE_API_TOKEN}"
 EOF
 chmod 600 "${VARS_FILE}"
 
@@ -123,7 +127,9 @@ ssh -o StrictHostKeyChecking=no -i "${SSH_KEY_FILE}" root@"${SERVER_NAME}" \
 echo "Provisioning complete."
 TAILSCALE_FQDN=$(ssh -o StrictHostKeyChecking=no -i "${SSH_KEY_FILE}" root@"${SERVER_NAME}" \
     "tailscale status --json | jq -r '.Self.DNSName' | sed 's/\\.$//'" 2>/dev/null) || true
-if [ -n "${TAILSCALE_FQDN}" ]; then
+if [ -n "${CODER_DOMAIN}" ]; then
+    echo "Coder is available at: https://${CODER_DOMAIN}"
+elif [ -n "${TAILSCALE_FQDN}" ]; then
     echo "Coder is available at: https://${TAILSCALE_FQDN}"
 else
     echo "Coder is running. Run 'bash scripts/verify.sh' to get the URL."
