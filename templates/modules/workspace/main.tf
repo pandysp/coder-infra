@@ -183,8 +183,17 @@ resource "coder_script" "docker_cli" {
   script             = <<-EOT
     #!/bin/bash
     set -eo pipefail
+    # Sysbox provides the runtime; install CLI + daemon inside the container
     if ! command -v docker &> /dev/null; then
       curl -fsSL https://get.docker.com | sh
+    fi
+    # Start dockerd if not already running (no systemd in Sysbox containers)
+    if ! docker info &>/dev/null; then
+      sudo dockerd &>/tmp/dockerd.log &
+      for i in $(seq 1 30); do
+        docker info &>/dev/null && break
+        sleep 1
+      done
     fi
   EOT
 }
@@ -198,7 +207,7 @@ module "claude_code" {
   claude_api_key          = var.anthropic_api_key
   ai_prompt               = data.coder_task.me.prompt
   permission_mode              = data.coder_parameter.claude_permission.value
-  dangerously_skip_permissions = true
+  dangerously_skip_permissions = data.coder_parameter.claude_permission.value == "bypassPermissions"
   cli_app                      = true
   disable_autoupdater          = true
   system_prompt                = "You are running in a Coder workspace. Tools available: rg, fd, tree, node, npm, git. If a repo was cloned, it is in /home/coder/."
