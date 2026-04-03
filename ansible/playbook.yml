@@ -7,5 +7,5 @@
     - ufw
     - docker
     - sysbox
-    - coder
     - mosh
+    - coder
