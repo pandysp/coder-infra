@@ -13,6 +13,10 @@ sysbox_enabled: true
 
 # Coder
 coder_dir: /opt/coder
-coder_image: "ghcr.io/coder/coder:latest"
+coder_image: "ghcr.io/coder/coder:v2.31.7"
 coder_postgres_image: "postgres:16-alpine"
 coder_caddy_image: "caddy:2-alpine"
+
+# GitHub External Auth (optional — requires a GitHub OAuth App)
+github_oauth_client_id: ""
+github_oauth_client_secret: ""

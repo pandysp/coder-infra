@@ -1,7 +1,8 @@
 terraform {
   required_providers {
     coder = {
-      source = "coder/coder"
+      source  = "coder/coder"
+      version = ">= 2.13.0, < 3.0.0"
     }
     docker = {
       source = "kreuzwerker/docker"
@@ -12,11 +13,12 @@ terraform {
 data "coder_provisioner" "me" {}
 data "coder_workspace" "me" {}
 data "coder_workspace_owner" "me" {}
+data "coder_task" "me" {}
 
 data "coder_parameter" "cpu" {
   name         = "cpu"
   display_name = "CPU Cores"
-  description  = "Number of CPU cores for the workspace container"
+  description  = "CPU scheduling weight (relative to other containers, not dedicated cores)"
   type         = "number"
   default      = "2"
   mutable      = true
@@ -58,47 +60,37 @@ data "coder_parameter" "web_preview_port" {
   }
 }
 
-locals {
-  base_startup = <<-EOT
-    #!/bin/bash
-    set -eo pipefail
+data "coder_parameter" "repo_url" {
+  name         = "repo_url"
+  display_name = "Repository URL"
+  description  = "Git repository to clone into the workspace (leave empty to skip)"
+  type         = "string"
+  default      = ""
+  mutable      = false
+  icon         = "/icon/git.svg"
+}
 
-    if ! command -v rg &> /dev/null; then
-      sudo apt-get update -qq
-      sudo apt-get install -y -qq ripgrep fd-find tree
-    fi
+data "coder_parameter" "claude_permission" {
+  name         = "claude_permission"
+  display_name = "Claude Permission Mode"
+  description  = "Permission level for Claude Code"
+  type         = "string"
+  default      = "default"
+  mutable      = true
+  icon         = "/icon/coder.svg"
 
-    if ! command -v node &> /dev/null; then
-      curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-      sudo apt-get install -y -qq nodejs
-    fi
-  EOT
-
-  dind_startup = <<-EOT
-    # Sysbox provides the runtime; only the CLI is needed inside the container
-    if ! command -v docker &> /dev/null; then
-      curl -fsSL https://get.docker.com | sh
-    fi
-  EOT
-
-  claude_startup = <<-EOT
-    if [ -n "$${CLAUDE_SETUP_TOKEN:-}" ]; then
-      echo "Configuring Claude Code authentication..."
-      if npx --yes @anthropic-ai/claude-code@latest setup-token "$CLAUDE_SETUP_TOKEN" 2>&1; then
-        echo "Claude Code authentication configured."
-      else
-        echo "WARNING: Claude Code setup-token failed. Claude Code may not work." >&2
-        echo "Retry manually: npx @anthropic-ai/claude-code@latest setup-token <token>" >&2
-      fi
-      unset CLAUDE_SETUP_TOKEN
-    fi
-  EOT
-
-  startup_script = join("\n", compact([
-    local.base_startup,
-    var.enable_docker_in_docker ? local.dind_startup : "",
-    local.claude_startup,
-  ]))
+  option {
+    name  = "Default (ask for approval)"
+    value = "default"
+  }
+  option {
+    name  = "Accept Edits (auto-approve file changes)"
+    value = "acceptEdits"
+  }
+  option {
+    name  = "Bypass Permissions (full autonomy)"
+    value = "bypassPermissions"
+  }
 }
 
 resource "coder_agent" "main" {
@@ -113,7 +105,17 @@ resource "coder_agent" "main" {
     port_forwarding_helper = true
   }
 
-  startup_script = local.startup_script
+  resources_monitoring {
+    memory {
+      enabled   = true
+      threshold = 80
+    }
+    volume {
+      enabled   = true
+      threshold = 90
+      path      = "/home/coder"
+    }
+  }
 
   metadata {
     display_name = "CPU Usage"
@@ -140,21 +142,91 @@ resource "coder_agent" "main" {
   }
 }
 
-module "claude_code" {
-  source   = "registry.coder.com/coder/claude-code/coder"
-  version  = "4.8.1"
-  agent_id = coder_agent.main.id
-  workdir  = "/home/coder"
+resource "coder_script" "system_setup" {
+  agent_id           = coder_agent.main.id
+  display_name       = "System Setup"
+  icon               = "/icon/terminal.svg"
+  run_on_start       = true
+  start_blocks_login = true
+  timeout            = 300
+  script             = <<-EOT
+    #!/bin/bash
+    set -eo pipefail
+    if ! command -v rg &> /dev/null; then
+      sudo apt-get update -qq
+      sudo apt-get install -y -qq ripgrep fd-find tree
+    fi
+    if ! command -v node &> /dev/null; then
+      curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+      sudo apt-get install -y -qq nodejs
+    fi
+  EOT
 }
 
-resource "coder_app" "web_preview" {
+resource "coder_script" "docker_cli" {
+  count              = var.enable_docker_in_docker ? 1 : 0
+  agent_id           = coder_agent.main.id
+  display_name       = "Docker CLI"
+  icon               = "/icon/docker.svg"
+  run_on_start       = true
+  start_blocks_login = true
+  timeout            = 120
+  script             = <<-EOT
+    #!/bin/bash
+    set -eo pipefail
+    if ! command -v docker &> /dev/null; then
+      curl -fsSL https://get.docker.com | sh
+    fi
+  EOT
+}
+
+module "claude_code" {
+  source                  = "registry.coder.com/coder/claude-code/coder"
+  version                 = "4.8.2"
+  agent_id                = coder_agent.main.id
+  workdir                 = "/home/coder"
+  claude_code_oauth_token = var.claude_setup_token
+  claude_api_key          = var.anthropic_api_key
+  ai_prompt               = data.coder_task.me.prompt
+  permission_mode         = data.coder_parameter.claude_permission.value
+  report_tasks            = true
+  cli_app                 = true
+  disable_autoupdater     = true
+  system_prompt           = "You are running in a Coder workspace. Tools available: rg, fd, tree, node, npm, git. If a repo was cloned, it is in /home/coder/."
+}
+
+module "dotfiles" {
+  source   = "registry.coder.com/coder/dotfiles/coder"
+  version  = "1.4.1"
+  agent_id = coder_agent.main.id
+}
+
+module "git_clone" {
+  count    = data.coder_parameter.repo_url.value != "" ? 1 : 0
+  source   = "registry.coder.com/coder/git-clone/coder"
+  version  = "1.2.3"
+  agent_id = coder_agent.main.id
+  url      = data.coder_parameter.repo_url.value
+}
+
+resource "coder_ai_task" "claude" {
+  app_id = module.claude_code.task_app_id
+}
+
+resource "coder_app" "preview" {
   agent_id     = coder_agent.main.id
-  slug         = "web-preview"
+  slug         = "preview"
   display_name = "Web Preview"
   url          = "http://localhost:${data.coder_parameter.web_preview_port.value}"
   icon         = "/icon/globe.svg"
   subdomain    = true
   share        = "owner"
+
+  healthcheck {
+    url       = "http://localhost:${data.coder_parameter.web_preview_port.value}"
+    interval  = 15
+    threshold = 3
+  }
 }
 
 resource "docker_volume" "home" {
@@ -177,8 +249,6 @@ resource "docker_container" "workspace" {
 
   env = [
     "CODER_AGENT_TOKEN=${coder_agent.main.token}",
-    "ANTHROPIC_API_KEY=${var.anthropic_api_key}",
-    "CLAUDE_SETUP_TOKEN=${var.claude_setup_token}",
   ]
 
   host {

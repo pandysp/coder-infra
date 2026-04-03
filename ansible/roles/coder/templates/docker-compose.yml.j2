@@ -25,6 +25,14 @@ services:
       CODER_ACCESS_URL: "https://{{ tailscale_fqdn }}"
       CODER_HTTP_ADDRESS: "0.0.0.0:7080"
       CODER_TELEMETRY_ENABLE: "false"
+      # Server-side: used by Coder to auto-generate task names via Anthropic API
+      ANTHROPIC_API_KEY: "{{ anthropic_api_key }}"
+{% if github_oauth_client_id | default('') | length > 0 %}
+      CODER_EXTERNAL_AUTH_0_ID: "github"
+      CODER_EXTERNAL_AUTH_0_TYPE: "github"
+      CODER_EXTERNAL_AUTH_0_CLIENT_ID: "{{ github_oauth_client_id }}"
+      CODER_EXTERNAL_AUTH_0_CLIENT_SECRET: "{{ github_oauth_client_secret }}"
+{% endif %}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     group_add:

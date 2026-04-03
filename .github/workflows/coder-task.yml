@@ -1,0 +1,55 @@
+name: Coder Task from Issue
+
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  create-task:
+    if: github.event.label.name == 'coder'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Coder CLI
+        run: curl -fsSL https://coder.com/install.sh | sh -s -- --version 2.31.7
+
+      - name: Create Coder task
+        env:
+          CODER_URL: ${{ secrets.CODER_URL }}
+          CODER_SESSION_TOKEN: ${{ secrets.CODER_SESSION_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          REPO_NAME="${REPO#*/}"
+          ISSUE_SLUG="$(printf '%s' "${ISSUE_TITLE}" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-//; s/-$//' | cut -c1-40)"
+          TASK_NAME="issue-${ISSUE_NUMBER}"
+
+          if [ -n "${ISSUE_SLUG}" ]; then
+            TASK_NAME="${TASK_NAME}-${ISSUE_SLUG}"
+          fi
+
+          PROMPT=$(cat <<EOF
+          GitHub issue #${ISSUE_NUMBER}: ${ISSUE_TITLE}
+
+          Repository
+          - Clone this repository first: https://github.com/${REPO}.git
+          - Preferred directory: ~/${REPO_NAME}
+
+          Work plan
+          1. Clone the repository into the workspace before making any changes.
+          2. Read the issue details below and implement the requested changes.
+          3. Run the relevant tests or validation commands.
+          4. If GitHub auth is available, open a pull request. Otherwise, leave a clear summary of the work completed and any remaining follow-up.
+
+          Issue details
+          ${ISSUE_BODY}
+          EOF
+          )
+
+          coder task create \
+            --name "${TASK_NAME}" \
+            --template base-dev \
+            "$PROMPT"

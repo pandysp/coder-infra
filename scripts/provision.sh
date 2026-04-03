@@ -12,6 +12,8 @@ DRY_RUN="${DRY_RUN:-false}"
 : "${CLAUDE_SETUP_TOKEN:?CLAUDE_SETUP_TOKEN is required}"
 # ANTHROPIC_API_KEY is optional when using claude setup-token for subscription auth
 ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}"
+GITHUB_OAUTH_CLIENT_ID="${GITHUB_OAUTH_CLIENT_ID:-}"
+GITHUB_OAUTH_CLIENT_SECRET="${GITHUB_OAUTH_CLIENT_SECRET:-}"
 
 # Write SSH key and secrets to temp files
 SSH_KEY_FILE=$(mktemp)
@@ -34,7 +36,8 @@ server_name: "${SERVER_NAME}"
 coder_admin_email: "${CODER_ADMIN_EMAIL}"
 claude_setup_token: "${CLAUDE_SETUP_TOKEN}"
 anthropic_api_key: "${ANTHROPIC_API_KEY}"
-github_token: "${GITHUB_TOKEN:-}"
+github_oauth_client_id: "${GITHUB_OAUTH_CLIENT_ID}"
+github_oauth_client_secret: "${GITHUB_OAUTH_CLIENT_SECRET}"
 EOF
 chmod 600 "${VARS_FILE}"
 

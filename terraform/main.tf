@@ -11,12 +11,13 @@ resource "terraform_data" "provision" {
   provisioner "local-exec" {
     command = "bash ${path.module}/../scripts/provision.sh"
     environment = {
-      SERVER_NAME        = var.server_name
-      SSH_PRIVATE_KEY    = tls_private_key.deploy.private_key_openssh
-      CODER_ADMIN_EMAIL  = var.coder_admin_email
-      CLAUDE_SETUP_TOKEN = var.claude_setup_token
-      ANTHROPIC_API_KEY  = var.anthropic_api_key
-      GITHUB_TOKEN       = var.github_token
+      SERVER_NAME                = var.server_name
+      SSH_PRIVATE_KEY            = tls_private_key.deploy.private_key_openssh
+      CODER_ADMIN_EMAIL          = var.coder_admin_email
+      CLAUDE_SETUP_TOKEN         = var.claude_setup_token
+      ANTHROPIC_API_KEY          = var.anthropic_api_key
+      GITHUB_OAUTH_CLIENT_ID     = var.github_oauth_client_id
+      GITHUB_OAUTH_CLIENT_SECRET = var.github_oauth_client_secret
     }
   }
 

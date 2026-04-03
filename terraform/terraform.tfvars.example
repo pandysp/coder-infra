@@ -4,7 +4,7 @@
 # The local terraform.tfstate file stores ALL resource attributes including:
 # - SSH private key (tls_private_key.deploy)
 # - Tailscale auth key (in hcloud_server.coder user_data)
-# - Anthropic API key, Claude setup token, GitHub token
+# - Anthropic API key, Claude setup token, GitHub OAuth client secret
 #
 # Recommendations:
 # - chmod 600 terraform.tfstate terraform.tfstate.backup
@@ -45,7 +45,8 @@ coder_admin_email  = "your@email.com"
 # server_name     = "coder-dev"
 # server_type     = "cx33"
 # server_location = "fsn1"
-# github_token    = "<your-github-token>"
+# github_oauth_client_id     = ""   # GitHub OAuth App for external auth
+# github_oauth_client_secret = ""   # (create at github.com/settings/developers)
 
 # Change this value to re-run Ansible without replacing the server.
 # Useful after rotating API keys or changing Ansible config.

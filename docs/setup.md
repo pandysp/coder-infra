@@ -40,7 +40,8 @@ Optional variables (these have defaults):
 server_name     = "coder-dev"   # Hostname and Tailscale device name
 server_type     = "cx33"        # Hetzner server type (cx33 = 4 vCPU, 8GB)
 server_location = "fsn1"        # Hetzner datacenter (fsn1, nbg1, hel1)
-github_token    = ""            # For workspace repo access
+github_oauth_client_id     = "" # GitHub OAuth App for external auth (optional)
+github_oauth_client_secret = "" # (create at github.com/settings/developers)
 ```
 
 ## 2. Deploy
@@ -105,6 +106,52 @@ Both templates expose these parameters, configurable per-workspace:
 | CPU Cores | 2 | 1-4 | CPU scheduling weight (relative, via `cpu_shares`) |
 | Memory (GB) | 4 | 1-8 | Container memory limit |
 | Web Preview Port | 3000 | 1024-65535 | Port for the web preview app |
+| Repository URL | (empty) | any URL | Git repo to clone into workspace |
+| Claude Permission | default | default/acceptEdits/bypassPermissions | Permission level for Claude Code |
+
+## GitHub External Auth (Optional)
+
+To enable GitHub OAuth for seamless git operations in workspaces:
+
+1. Create a GitHub OAuth App at [github.com/settings/developers](https://github.com/settings/developers)
+2. Set the callback URL to: `https://<your-coder-url>/external-auth/github/callback`
+3. Add to `terraform.tfvars`:
+
+```hcl
+github_oauth_client_id     = "<your-client-id>"
+github_oauth_client_secret = "<your-client-secret>"
+```
+
+4. Re-provision: `cd terraform && tofu apply`
+
+After re-provisioning, users can connect their GitHub account via the Coder dashboard under Settings > External Auth.
+
+## Tasks UI
+
+The workspace templates include `coder_ai_task` which enables the Coder Tasks UI for fire-and-forget background agents:
+
+1. Open the Coder dashboard
+2. Navigate to Tasks
+3. Create a new task with a prompt (e.g., "Fix the auth timeout bug")
+4. Claude Code runs autonomously in an isolated workspace
+5. Review the results when notified
+
+Tasks auto-pause at workspace idle timeout and can be resumed later.
+
+## Automated Issue-to-Task
+
+A GitHub Action (`.github/workflows/coder-task.yml`) automates creating Coder Tasks from GitHub issues:
+
+1. Add repository secrets: `CODER_URL` and `CODER_SESSION_TOKEN`
+2. Label any GitHub issue with `coder`
+3. The action runs `coder task create --template base-dev` with the issue body and repository URL in the prompt
+4. Claude Code works autonomously and creates a PR
+
+Generate a session token with:
+
+```bash
+coder tokens create
+```
 
 ## Workspace Networking
 

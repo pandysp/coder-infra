@@ -45,9 +45,15 @@ variable "anthropic_api_key" {
   sensitive   = true
 }
 
-variable "github_token" {
+variable "github_oauth_client_id" {
   type        = string
-  description = "GitHub token for workspace repo access (optional)"
+  description = "GitHub OAuth App client ID for Coder external auth (optional)"
+  default     = ""
+}
+
+variable "github_oauth_client_secret" {
+  type        = string
+  description = "GitHub OAuth App client secret for Coder external auth (optional)"
   sensitive   = true
   default     = ""
 }
