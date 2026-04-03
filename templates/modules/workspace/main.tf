@@ -75,21 +75,21 @@ data "coder_parameter" "claude_permission" {
   display_name = "Claude Permission Mode"
   description  = "Permission level for Claude Code"
   type         = "string"
-  default      = "default"
+  default      = "bypassPermissions"
   mutable      = true
   icon         = "/icon/coder.svg"
 
   option {
-    name  = "Default (ask for approval)"
-    value = "default"
+    name  = "Bypass Permissions (full autonomy)"
+    value = "bypassPermissions"
   }
   option {
     name  = "Accept Edits (auto-approve file changes)"
     value = "acceptEdits"
   }
   option {
-    name  = "Bypass Permissions (full autonomy)"
-    value = "bypassPermissions"
+    name  = "Default (ask for approval)"
+    value = "default"
   }
 }
 
