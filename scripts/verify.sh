@@ -7,17 +7,29 @@ echo "=== Verifying deployment: ${SERVER_NAME} ==="
 echo ""
 
 echo "1. Tailscale connectivity..."
-if ! tailscale ping -c 1 "${SERVER_NAME}" 2>/dev/null; then
-    # -c flag not supported (e.g., macOS); run with timeout via background + kill
-    tailscale ping "${SERVER_NAME}" &
+PING_OK=false
+if tailscale ping -c 1 "${SERVER_NAME}" 2>/dev/null; then
+    PING_OK=true
+else
+    # -c flag not supported (e.g., macOS); capture output from a timed background ping
+    PING_OUTPUT=$(mktemp)
+    tailscale ping "${SERVER_NAME}" > "${PING_OUTPUT}" 2>/dev/null &
     PING_PID=$!
-    sleep 3
-    if kill -0 "${PING_PID}" 2>/dev/null; then
-        kill "${PING_PID}" 2>/dev/null || true
-        wait "${PING_PID}" 2>/dev/null || true
+    sleep 5
+    kill "${PING_PID}" 2>/dev/null || true
+    wait "${PING_PID}" 2>/dev/null || true
+    if grep -q "pong" "${PING_OUTPUT}" 2>/dev/null; then
+        PING_OK=true
+        head -1 "${PING_OUTPUT}"
     fi
+    rm -f "${PING_OUTPUT}"
 fi
-echo "   OK"
+if [ "${PING_OK}" = "true" ]; then
+    echo "   OK"
+else
+    echo "   FAILED: ${SERVER_NAME} not reachable via Tailscale" >&2
+    exit 1
+fi
 echo ""
 
 echo "2. SSH access + remote checks..."

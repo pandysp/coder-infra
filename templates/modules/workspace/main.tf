@@ -13,7 +13,6 @@ data "coder_provisioner" "me" {}
 data "coder_workspace" "me" {}
 data "coder_workspace_owner" "me" {}
 
-
 data "coder_parameter" "cpu" {
   name         = "cpu"
   display_name = "CPU Cores"
@@ -58,7 +57,6 @@ data "coder_parameter" "web_preview_port" {
     max = 65535
   }
 }
-
 
 locals {
   base_startup = <<-EOT
@@ -152,7 +150,6 @@ resource "coder_app" "web_preview" {
   subdomain    = true
   share        = "owner"
 }
-
 
 resource "docker_volume" "home" {
   name = "coder-${data.coder_workspace.me.id}-home"
