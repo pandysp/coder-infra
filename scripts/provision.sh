@@ -9,7 +9,8 @@ ANSIBLE_DIR="${SCRIPT_DIR}/../ansible"
 : "${SSH_PRIVATE_KEY:?SSH_PRIVATE_KEY is required}"
 : "${CODER_ADMIN_EMAIL:?CODER_ADMIN_EMAIL is required}"
 : "${CLAUDE_SETUP_TOKEN:?CLAUDE_SETUP_TOKEN is required}"
-: "${ANTHROPIC_API_KEY:?ANTHROPIC_API_KEY is required}"
+# ANTHROPIC_API_KEY is optional when using claude setup-token for subscription auth
+ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}"
 
 # Write SSH key and secrets to temp files
 SSH_KEY_FILE=$(mktemp)
@@ -67,9 +68,15 @@ ansible-playbook playbook.yml \
     -i "${INVENTORY_FILE}" \
     -e "@${VARS_FILE}"
 
-# Shred cloud-init logs (contain the Tailscale auth key)
+# Shred cloud-init artifacts that contain the Tailscale auth key.
+# The user-data script self-cleans, but belt-and-suspenders: also clean from here
+# in case self-cleanup didn't run (e.g., cloud-init failure before that step).
 ssh -o StrictHostKeyChecking=no -i "${SSH_KEY_FILE}" root@"${SERVER_NAME}" \
-    "shred -u /var/log/cloud-init-coder.log /var/log/cloud-init-output.log 2>/dev/null || true"
+    "shred -u /var/log/cloud-init-coder.log /var/log/cloud-init-output.log \
+            /var/lib/cloud/instance/user-data.txt \
+            /var/lib/cloud/instance/user-data.txt.i \
+            /run/cloud-init/combined-cloud-config.json 2>/dev/null || true
+     find /var/lib/cloud/instance/scripts/ -type f -exec shred -u {} \; 2>/dev/null || true"
 
 echo "Provisioning complete."
 TAILSCALE_FQDN=$(ssh -o StrictHostKeyChecking=no -i "${SSH_KEY_FILE}" root@"${SERVER_NAME}" \

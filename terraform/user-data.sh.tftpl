@@ -22,3 +22,11 @@ tailscale up --authkey "file:/tmp/ts-authkey" --hostname="${hostname}" --ssh --f
 rm -f /tmp/ts-authkey
 
 echo "=== Bootstrap complete: $(date) ==="
+
+# Self-cleanup: remove cloud-init artifacts that contain the Tailscale auth key.
+# Cloud-init persists user-data to disk for re-run support; we don't need that
+# and it leaves the auth key recoverable by anyone with root access.
+shred -u /var/lib/cloud/instance/user-data.txt 2>/dev/null || true
+shred -u /var/lib/cloud/instance/user-data.txt.i 2>/dev/null || true
+shred -u /run/cloud-init/combined-cloud-config.json 2>/dev/null || true
+find /var/lib/cloud/instance/scripts/ -type f -exec shred -u {} \; 2>/dev/null || true
