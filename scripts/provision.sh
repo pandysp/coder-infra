@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ANSIBLE_DIR="${SCRIPT_DIR}/../ansible"
+DRY_RUN="${DRY_RUN:-false}"
 
 # Validate required environment variables
 : "${SERVER_NAME:?SERVER_NAME is required}"
@@ -20,6 +21,44 @@ trap 'rm -f "${SSH_KEY_FILE}" "${INVENTORY_FILE}" "${VARS_FILE}"' EXIT
 
 echo "${SSH_PRIVATE_KEY}" > "${SSH_KEY_FILE}"
 chmod 600 "${SSH_KEY_FILE}"
+
+# Create temporary inventory
+cat > "${INVENTORY_FILE}" <<EOF
+[coder]
+${SERVER_NAME} ansible_user=root ansible_ssh_private_key_file=${SSH_KEY_FILE} ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+EOF
+
+# Write secrets to temp vars file (avoids exposing them in process list via -e)
+cat > "${VARS_FILE}" <<EOF
+server_name: "${SERVER_NAME}"
+coder_admin_email: "${CODER_ADMIN_EMAIL}"
+claude_setup_token: "${CLAUDE_SETUP_TOKEN}"
+anthropic_api_key: "${ANTHROPIC_API_KEY}"
+github_token: "${GITHUB_TOKEN:-}"
+EOF
+chmod 600 "${VARS_FILE}"
+
+# Dry-run: validate inputs and show what would be executed, then exit
+if [ "${DRY_RUN}" = "true" ]; then
+    echo "=== DRY RUN ==="
+    echo "Environment variables: OK"
+    echo "Inventory:"
+    cat "${INVENTORY_FILE}"
+    echo ""
+    echo "Vars file generated (contents hidden — contains secrets)"
+    echo ""
+    echo "Would run:"
+    echo "  cd ${ANSIBLE_DIR}"
+    echo "  ansible-galaxy collection install -r requirements.yml"
+    echo "  ansible-playbook playbook.yml -i ${INVENTORY_FILE} -e @${VARS_FILE}"
+    echo ""
+    # Also validate Ansible syntax while we're here
+    cd "${ANSIBLE_DIR}"
+    ansible-galaxy collection install -r requirements.yml 2>/dev/null || true
+    echo "Ansible syntax check:"
+    ansible-playbook playbook.yml --syntax-check -i "${INVENTORY_FILE}" 2>&1 && echo "  OK" || echo "  FAILED"
+    exit 0
+fi
 
 # Wait for device to appear on tailnet
 # The Hetzner firewall blocks all inbound on the public IP.
@@ -44,25 +83,9 @@ ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 \
     -i "${SSH_KEY_FILE}" root@"${SERVER_NAME}" \
     "cloud-init status --wait" || true
 
-# Create temporary inventory
-cat > "${INVENTORY_FILE}" <<EOF
-[coder]
-${SERVER_NAME} ansible_user=root ansible_ssh_private_key_file=${SSH_KEY_FILE} ansible_ssh_common_args='-o StrictHostKeyChecking=no'
-EOF
-
 # Install Ansible Galaxy requirements
 cd "${ANSIBLE_DIR}"
 ansible-galaxy collection install -r requirements.yml 2>/dev/null || true
-
-# Write secrets to temp vars file (avoids exposing them in process list via -e)
-cat > "${VARS_FILE}" <<EOF
-server_name: "${SERVER_NAME}"
-coder_admin_email: "${CODER_ADMIN_EMAIL}"
-claude_setup_token: "${CLAUDE_SETUP_TOKEN}"
-anthropic_api_key: "${ANTHROPIC_API_KEY}"
-github_token: "${GITHUB_TOKEN:-}"
-EOF
-chmod 600 "${VARS_FILE}"
 
 ansible-playbook playbook.yml \
     -i "${INVENTORY_FILE}" \

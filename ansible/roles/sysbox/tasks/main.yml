@@ -13,7 +13,7 @@
 
 - name: Set Sysbox install needed fact
   ansible.builtin.set_fact:
-    sysbox_needs_install: "{{ sysbox_installed_version.stdout != sysbox_version + '-0' }}"
+    sysbox_needs_install: "{{ sysbox_version not in sysbox_installed_version.stdout }}"
 
 - name: Download Sysbox package
   ansible.builtin.get_url:
