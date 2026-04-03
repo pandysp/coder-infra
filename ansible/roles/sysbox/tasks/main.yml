@@ -2,7 +2,7 @@
 - name: Install Sysbox dependencies
   ansible.builtin.apt:
     name:
-      - fuse
+      - fuse3
       - rsync
     state: present
 
