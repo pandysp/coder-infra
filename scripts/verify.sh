@@ -9,17 +9,18 @@ echo ""
 echo "1. Tailscale connectivity..."
 # tailscale ping exits non-zero when direct connection times out, even if DERP
 # pong succeeded. Use -c 3 for reliability and check output for any pong.
-PING_OUT=$(tailscale ping -c 3 "${SERVER_NAME}" 2>/dev/null || true)
+PING_OUT=$(tailscale ping -c 3 "${SERVER_NAME}" 2>&1 || true)
 if echo "${PING_OUT}" | grep -q "pong"; then
     echo "   $(echo "${PING_OUT}" | grep "pong" | head -1)"
 else
     echo "   FAILED: ${SERVER_NAME} not reachable via Tailscale" >&2
+    echo "   Diagnostics: ${PING_OUT}" >&2
     exit 1
 fi
 echo ""
 
 echo "2. SSH access + remote checks..."
-REMOTE_OUTPUT=$(ssh -o ConnectTimeout=10 root@"${SERVER_NAME}" bash <<'CHECKS'
+if ! REMOTE_OUTPUT=$(ssh -o ConnectTimeout=10 root@"${SERVER_NAME}" bash <<'CHECKS' 2>&1
 set -euo pipefail
 
 echo "=== SSH OK ==="
@@ -39,7 +40,11 @@ tailscale serve status 2>&1 | head -5
 echo "=== FQDN ==="
 tailscale status --json | jq -r '.Self.DNSName' | sed 's/\.$//'
 CHECKS
-)
+); then
+    echo "   FAILED: Remote checks returned errors" >&2
+    echo "${REMOTE_OUTPUT}" | sed 's/^/   /' >&2
+    exit 1
+fi
 
 # Parse and display results
 echo "   OK"

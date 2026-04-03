@@ -54,9 +54,16 @@ if [ "${DRY_RUN}" = "true" ]; then
     echo ""
     # Also validate Ansible syntax while we're here
     cd "${ANSIBLE_DIR}"
-    ansible-galaxy collection install -r requirements.yml 2>/dev/null || true
+    if ! ansible-galaxy collection install -r requirements.yml 2>&1; then
+        echo "  WARNING: Galaxy collection install failed. Syntax check may be incomplete." >&2
+    fi
     echo "Ansible syntax check:"
-    ansible-playbook playbook.yml --syntax-check -i "${INVENTORY_FILE}" 2>&1 && echo "  OK" || echo "  FAILED"
+    if ansible-playbook playbook.yml --syntax-check -i "${INVENTORY_FILE}" 2>&1; then
+        echo "  OK"
+    else
+        echo "  FAILED"
+        exit 1
+    fi
     exit 0
 fi
 
@@ -65,13 +72,16 @@ fi
 # Cloud-init installs Tailscale, which connects outbound to the tailnet.
 # Once connected, we can SSH via the Tailscale hostname.
 echo "Waiting for ${SERVER_NAME} to appear on tailnet..."
+LAST_PING=""
 for i in $(seq 1 60); do
-    if tailscale ping -c 3 "${SERVER_NAME}" 2>/dev/null | grep -q "pong"; then
+    LAST_PING=$(tailscale ping -c 3 "${SERVER_NAME}" 2>&1 || true)
+    if echo "${LAST_PING}" | grep -q "pong"; then
         echo "Device is reachable via Tailscale."
         break
     fi
     if [ "$i" -eq 60 ]; then
         echo "ERROR: ${SERVER_NAME} did not appear on tailnet within 10 minutes" >&2
+        echo "Last ping output: ${LAST_PING}" >&2
         exit 1
     fi
     sleep 10
@@ -79,13 +89,19 @@ done
 
 # Wait for cloud-init to complete
 echo "Waiting for cloud-init to finish..."
-ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 \
+CI_OUTPUT=$(ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 \
     -i "${SSH_KEY_FILE}" root@"${SERVER_NAME}" \
-    "cloud-init status --wait" || true
+    "cloud-init status --wait" 2>&1) || true
+if echo "${CI_OUTPUT}" | grep -qi "error"; then
+    echo "ERROR: cloud-init reported failure:" >&2
+    echo "${CI_OUTPUT}" >&2
+    echo "Check /var/log/cloud-init-coder.log on the server." >&2
+    exit 1
+fi
 
 # Install Ansible Galaxy requirements
 cd "${ANSIBLE_DIR}"
-ansible-galaxy collection install -r requirements.yml 2>/dev/null || true
+ansible-galaxy collection install -r requirements.yml
 
 ansible-playbook playbook.yml \
     -i "${INVENTORY_FILE}" \
@@ -103,5 +119,9 @@ ssh -o StrictHostKeyChecking=no -i "${SSH_KEY_FILE}" root@"${SERVER_NAME}" \
 
 echo "Provisioning complete."
 TAILSCALE_FQDN=$(ssh -o StrictHostKeyChecking=no -i "${SSH_KEY_FILE}" root@"${SERVER_NAME}" \
-    "tailscale status --json | jq -r '.Self.DNSName' | sed 's/\\.$//'")
-echo "Coder is available at: https://${TAILSCALE_FQDN}"
+    "tailscale status --json | jq -r '.Self.DNSName' | sed 's/\\.$//'" 2>/dev/null) || true
+if [ -n "${TAILSCALE_FQDN}" ]; then
+    echo "Coder is available at: https://${TAILSCALE_FQDN}"
+else
+    echo "Coder is running. Run 'bash scripts/verify.sh' to get the URL."
+fi

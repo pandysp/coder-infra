@@ -110,7 +110,7 @@ Both templates expose these parameters, configurable per-workspace:
 
 Workspace containers run on the Docker bridge network and cannot reach the Tailscale FQDN directly. The template handles this with three mechanisms:
 
-1. **Caddy binds to `0.0.0.0:80`** so workspace containers can reach it via the Docker bridge gateway (`host.docker.internal`). External access is blocked by the Hetzner firewall and UFW.
+1. **Caddy binds to `0.0.0.0:80`** so workspace containers can reach it via the Docker bridge gateway (`host.docker.internal`). External access is blocked by the Hetzner cloud firewall (no inbound rules). Note: Docker port publishing bypasses UFW via iptables NAT rules, so the Hetzner firewall is the sole perimeter control for port 80.
 
 2. **Init script URL rewriting**: The Coder agent init script references `CODER_ACCESS_URL` (a Tailscale FQDN). The template's `replace()` rewrites this to `http://host.docker.internal:80` so the agent can download and connect through Caddy.
 

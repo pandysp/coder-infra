@@ -61,7 +61,7 @@ data "coder_parameter" "web_preview_port" {
 locals {
   base_startup = <<-EOT
     #!/bin/bash
-    set -e
+    set -eo pipefail
 
     if ! command -v rg &> /dev/null; then
       sudo apt-get update -qq
@@ -83,7 +83,13 @@ locals {
 
   claude_startup = <<-EOT
     if [ -n "$${CLAUDE_SETUP_TOKEN:-}" ]; then
-      npx --yes @anthropic-ai/claude-code@latest setup-token "$CLAUDE_SETUP_TOKEN" 2>/dev/null || true
+      echo "Configuring Claude Code authentication..."
+      if npx --yes @anthropic-ai/claude-code@latest setup-token "$CLAUDE_SETUP_TOKEN" 2>&1; then
+        echo "Claude Code authentication configured."
+      else
+        echo "WARNING: Claude Code setup-token failed. Claude Code may not work." >&2
+        echo "Retry manually: npx @anthropic-ai/claude-code@latest setup-token <token>" >&2
+      fi
       unset CLAUDE_SETUP_TOKEN
     fi
   EOT

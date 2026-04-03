@@ -18,7 +18,7 @@ Hetzner CX33 (4 vCPU, 8GB RAM, 100GB NVMe, Ubuntu 24.04)
   ├── Tailscale (networking, HTTPS via Serve)
   ├── Docker + Sysbox (container runtimes)
   └── Coder (Docker Compose: coder + postgres + caddy)
-        ├── Workspace template: base-dev (CC + tmux + common tools)
+        ├── Workspace template: base-dev (CC + Node.js + ripgrep + fd + tree)
         └── Workspace template: docker-dev (base-dev + DinD via Sysbox)
 ```
 
@@ -78,7 +78,7 @@ coder-infra/
 hcloud_token (sensitive) — Hetzner API token
 tailscale_auth_key (sensitive) — Tailscale auth key (reusable, ephemeral)
 claude_setup_token (sensitive) — From `claude setup-token`
-anthropic_api_key (sensitive) — For CC API access in workspaces
+anthropic_api_key (sensitive, optional) — For CC API access (not needed with setup-token subscription auth)
 server_name — hostname (default: "coder-dev")
 server_type — Hetzner type (default: "cx33")
 server_location — DC location (default: "fsn1")
@@ -98,7 +98,7 @@ force_reprovision — change to re-run Ansible without server replacement
 8. `force_reprovision` variable for secret rotation without server replacement
 9. Destroy-time provisioner runs `tailscale logout` (graceful fallback if SSH fails)
 10. Workspace templates use shared module via symlinks; push with `make push-templates` (tar -cvh dereferences)
-11. Workspace containers use `replace()` to rewrite Tailscale FQDN → `http://host.docker.internal:80` in init_script
+11. Workspace containers use chained `replace()`: first rewrites Tailscale FQDN → `http://host.docker.internal:80`, then replaces remaining `localhost/127.0.0.1` references
 12. DNS: `["100.100.100.100", "1.1.1.1"]` — MagicDNS for Tailscale names, Cloudflare for internet
 
 ## Coding Style
