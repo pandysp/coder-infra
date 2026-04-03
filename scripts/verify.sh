@@ -7,25 +7,11 @@ echo "=== Verifying deployment: ${SERVER_NAME} ==="
 echo ""
 
 echo "1. Tailscale connectivity..."
-PING_OK=false
-if tailscale ping -c 1 "${SERVER_NAME}" 2>/dev/null; then
-    PING_OK=true
-else
-    # -c flag not supported (e.g., macOS); capture output from a timed background ping
-    PING_OUTPUT=$(mktemp)
-    tailscale ping "${SERVER_NAME}" > "${PING_OUTPUT}" 2>/dev/null &
-    PING_PID=$!
-    sleep 5
-    kill "${PING_PID}" 2>/dev/null || true
-    wait "${PING_PID}" 2>/dev/null || true
-    if grep -q "pong" "${PING_OUTPUT}" 2>/dev/null; then
-        PING_OK=true
-        head -1 "${PING_OUTPUT}"
-    fi
-    rm -f "${PING_OUTPUT}"
-fi
-if [ "${PING_OK}" = "true" ]; then
-    echo "   OK"
+# tailscale ping exits non-zero when direct connection times out, even if DERP
+# pong succeeded. Use -c 3 for reliability and check output for any pong.
+PING_OUT=$(tailscale ping -c 3 "${SERVER_NAME}" 2>/dev/null || true)
+if echo "${PING_OUT}" | grep -q "pong"; then
+    echo "   $(echo "${PING_OUT}" | grep "pong" | head -1)"
 else
     echo "   FAILED: ${SERVER_NAME} not reachable via Tailscale" >&2
     exit 1
