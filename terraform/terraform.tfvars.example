@@ -38,7 +38,7 @@
 hcloud_token       = "<your-hetzner-api-token>"
 tailscale_auth_key = "<your-tailscale-auth-key>"
 claude_setup_token = "<output-of-claude-setup-token>"
-anthropic_api_key  = "<your-anthropic-api-key>"
+anthropic_api_key  = ""  # optional when using claude setup-token for subscription auth
 coder_admin_email  = "your@email.com"
 
 # Optional (these have defaults)
