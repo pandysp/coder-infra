@@ -169,7 +169,7 @@ resource "docker_container" "workspace" {
   image    = "codercom/enterprise-base:ubuntu"
   name     = "coder-${data.coder_workspace_owner.me.name}-${lower(data.coder_workspace.me.name)}"
   hostname = data.coder_workspace.me.name
-  dns      = ["100.100.100.100"]
+  dns      = ["100.100.100.100", "1.1.1.1"]
   runtime  = var.enable_docker_in_docker ? "sysbox-runc" : null
 
   cpu_shares = data.coder_parameter.cpu.value * 1024
@@ -192,5 +192,12 @@ resource "docker_container" "workspace" {
     read_only      = false
   }
 
-  entrypoint = ["sh", "-c", replace(coder_agent.main.init_script, "/localhost|127\\.0\\.0\\.1/", "host.docker.internal")]
+  # Workspace containers can't reach the Tailscale FQDN directly (they're not
+  # on the tailnet). Replace the access URL with the Caddy proxy reachable via
+  # the Docker bridge, and fall back to replacing localhost/127.0.0.1 as well.
+  entrypoint = ["sh", "-c", replace(
+    replace(coder_agent.main.init_script, data.coder_workspace.me.access_url, "http://host.docker.internal:80"),
+    "/localhost|127\\.0\\.0\\.1/",
+    "host.docker.internal"
+  )]
 }
