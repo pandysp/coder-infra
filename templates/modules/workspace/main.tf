@@ -94,7 +94,8 @@ data "coder_parameter" "claude_permission" {
 }
 
 # Enables "Connect GitHub" button in the Coder UI for OAuth-based git operations.
-# No HCL consumers needed — the Coder agent uses the token via GIT_ASKPASS.
+# Git auth is handled automatically by the Coder agent via GIT_ASKPASS.
+# The access_token is passed as GITHUB_TOKEN for non-git tools (gh CLI).
 # Requires CODER_EXTERNAL_AUTH_0_ID="github" on the Coder server.
 data "coder_external_auth" "github" {
   id       = "github"
@@ -190,17 +191,26 @@ resource "coder_script" "docker_cli" {
 
 module "claude_code" {
   source                  = "registry.coder.com/coder/claude-code/coder"
-  version                 = "4.8.2"
+  version                 = "4.9.1"
   agent_id                = coder_agent.main.id
   workdir                 = "/home/coder"
   claude_code_oauth_token = var.claude_setup_token
   claude_api_key          = var.anthropic_api_key
   ai_prompt               = data.coder_task.me.prompt
-  permission_mode         = data.coder_parameter.claude_permission.value
-  report_tasks            = true
-  cli_app                 = true
-  disable_autoupdater     = true
-  system_prompt           = "You are running in a Coder workspace. Tools available: rg, fd, tree, node, npm, git. If a repo was cloned, it is in /home/coder/."
+  permission_mode              = data.coder_parameter.claude_permission.value
+  dangerously_skip_permissions = true
+  cli_app                      = true
+  disable_autoupdater          = true
+  system_prompt                = "You are running in a Coder workspace. Tools available: rg, fd, tree, node, npm, git. If a repo was cloned, it is in /home/coder/."
+  # Pre-seed ~/.claude.json so the bypass-permissions consent TUI is skipped.
+  # The module's install.sh only writes this in standalone mode, not tasks mode.
+  pre_install_script = <<-EOT
+    if [ -f ~/.claude.json ]; then
+      jq '.bypassPermissionsModeAccepted = true | .hasCompletedOnboarding = true | .hasAcknowledgedCostThreshold = true' ~/.claude.json > ~/.claude.json.tmp && mv ~/.claude.json.tmp ~/.claude.json
+    else
+      echo '{"bypassPermissionsModeAccepted":true,"hasCompletedOnboarding":true,"hasAcknowledgedCostThreshold":true}' > ~/.claude.json
+    fi
+  EOT
 }
 
 module "dotfiles" {
@@ -218,6 +228,7 @@ module "git_clone" {
 }
 
 resource "coder_ai_task" "claude" {
+  count  = data.coder_workspace.me.start_count
   app_id = module.claude_code.task_app_id
 }
 
@@ -250,13 +261,17 @@ resource "docker_container" "workspace" {
   name     = "coder-${data.coder_workspace_owner.me.name}-${lower(data.coder_workspace.me.name)}"
   hostname = data.coder_workspace.me.name
   dns      = ["100.100.100.100", "1.1.1.1"]
-  runtime  = var.enable_docker_in_docker ? "sysbox-runc" : null
+  runtime = var.enable_docker_in_docker ? "sysbox-runc" : null
+
+  stop_timeout          = 300
+  destroy_grace_seconds = 300
 
   cpu_shares = data.coder_parameter.cpu.value * 1024
   memory     = data.coder_parameter.memory.value * 1024
 
   env = [
     "CODER_AGENT_TOKEN=${coder_agent.main.token}",
+    "GITHUB_TOKEN=${data.coder_external_auth.github.access_token}",
   ]
 
   host {
