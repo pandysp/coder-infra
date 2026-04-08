@@ -16,7 +16,7 @@ jobs:
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:ci
           version: 1.96.4
-          stateful-filtering: false
+          args: --stateful-filtering=false
 
       - name: Wait for Tailscale connectivity
         run: |
