@@ -1,5 +1,33 @@
 # Setup Guide
 
+This guide walks through deploying a self-hosted Coder instance with Claude Code on a Hetzner VPS behind Tailscale. The result is a persistent, zero-trust platform for running AI coding agents and remote development environments -- accessible only from your tailnet.
+
+## Setup Variants
+
+Choose your tier based on what you need. Each builds on the previous one.
+
+### Minimal (fastest path)
+
+Tailscale Serve for HTTPS, no custom domain, no GitHub OAuth. You get fire-and-forget Tasks, Claude Code in workspaces, and code-server -- all behind Tailscale. This is sufficient for solo use where you access everything via Tailscale URLs.
+
+**You need:** Hetzner account, Tailscale account, Claude setup token.
+
+### Recommended (full feature set)
+
+Adds a custom domain with wildcard TLS (via Cloudflare DNS-01) and GitHub OAuth. Wildcard subdomains enable code-server and Web Preview on their own URLs instead of port-forwarded proxies. GitHub OAuth gives seamless git auth inside workspaces.
+
+**You additionally need:** A domain with DNS on Cloudflare, a GitHub OAuth App.
+
+See [Custom Domain](#custom-domain-optional) and [GitHub External Auth](#github-external-auth-optional) below.
+
+### Team (small teams, automation)
+
+Adds the GitHub Action for Issue-to-Task automation and workspace presets for different use cases. Multiple team members can fire tasks from GitHub issues without touching the Coder UI.
+
+**You additionally need:** Tailscale OAuth client (for GitHub Actions to join tailnet), Coder session token.
+
+See [Automated Issue-to-Task](#automated-issue-to-task) below.
+
 ## Prerequisites
 
 - [OpenTofu](https://opentofu.org/docs/intro/install/) >= 1.9 (or [Terraform](https://developer.hashicorp.com/terraform/install))

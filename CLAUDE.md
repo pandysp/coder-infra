@@ -4,6 +4,8 @@
 Self-hosted Coder + Claude Code on Hetzner VPS with Tailscale zero-trust networking.
 OSS reference setup for solo developers who want persistent remote CC sessions with project isolation.
 
+The key insight: Coder is an enterprise CDE platform whose isolated, persistent, Terraform-managed environments turned out to be exactly what AI coding agents need. This repo wires up the full stack -- fire-and-forget Tasks, workspace presets, MCP delegation, GitHub Issue-to-Task automation -- on a single EUR 15/month VPS.
+
 ## Stack
 - **Terraform/OpenTofu** (HCL) — infrastructure provisioning (Hetzner Cloud)
 - **Ansible** — server configuration (roles-based)
@@ -24,7 +26,7 @@ Hetzner CX33 (4 vCPU, 8GB RAM, 100GB NVMe, Ubuntu 24.04)
 
 ## Reference: Coder docker-claude template
 The official Coder template for Claude Code uses:
-- `module "claude-code"` from `registry.coder.com/coder/claude-code/coder` (v4.8.2)
+- `module "claude-code"` from `registry.coder.com/coder/claude-code/coder` (v4.9.1)
 - Docker volumes for persistent /home/coder/
 - `coder_agent` resource with metadata and display apps, plus `coder_script` resources instead of a monolithic `startup_script`
 - `coder_app` for web preview ports
