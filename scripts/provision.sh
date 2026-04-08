@@ -32,17 +32,18 @@ cat > "${INVENTORY_FILE}" <<EOF
 ${SERVER_NAME} ansible_user=root ansible_ssh_private_key_file=${SSH_KEY_FILE} ansible_ssh_common_args='-o StrictHostKeyChecking=no'
 EOF
 
-# Write secrets to temp vars file (avoids exposing them in process list via -e)
-cat > "${VARS_FILE}" <<EOF
-server_name: "${SERVER_NAME}"
-coder_admin_email: "${CODER_ADMIN_EMAIL}"
-claude_setup_token: "${CLAUDE_SETUP_TOKEN}"
-anthropic_api_key: "${ANTHROPIC_API_KEY}"
-github_oauth_client_id: "${GITHUB_OAUTH_CLIENT_ID}"
-github_oauth_client_secret: "${GITHUB_OAUTH_CLIENT_SECRET}"
-coder_domain: "${CODER_DOMAIN}"
-cloudflare_api_token: "${CLOUDFLARE_API_TOKEN}"
-EOF
+# Write secrets to temp vars file as JSON (avoids YAML special-character issues
+# with colons, quotes, backslashes in secret values). Ansible handles JSON natively.
+jq -n \
+  --arg server_name "${SERVER_NAME}" \
+  --arg coder_admin_email "${CODER_ADMIN_EMAIL}" \
+  --arg claude_setup_token "${CLAUDE_SETUP_TOKEN}" \
+  --arg anthropic_api_key "${ANTHROPIC_API_KEY}" \
+  --arg github_oauth_client_id "${GITHUB_OAUTH_CLIENT_ID}" \
+  --arg github_oauth_client_secret "${GITHUB_OAUTH_CLIENT_SECRET}" \
+  --arg coder_domain "${CODER_DOMAIN}" \
+  --arg cloudflare_api_token "${CLOUDFLARE_API_TOKEN}" \
+  '$ARGS.named' > "${VARS_FILE}"
 chmod 600 "${VARS_FILE}"
 
 # Dry-run: validate inputs and show what would be executed, then exit
@@ -96,10 +97,14 @@ done
 
 # Wait for cloud-init to complete
 echo "Waiting for cloud-init to finish..."
-CI_OUTPUT=$(ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 \
+if ! CI_OUTPUT=$(ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 \
     -i "${SSH_KEY_FILE}" root@"${SERVER_NAME}" \
-    "cloud-init status --wait" 2>&1) || true
-if echo "${CI_OUTPUT}" | grep -qi "error"; then
+    "cloud-init status --wait" 2>&1); then
+    echo "ERROR: SSH failed while waiting for cloud-init:" >&2
+    echo "${CI_OUTPUT}" >&2
+    exit 1
+fi
+if echo "${CI_OUTPUT}" | grep -qiE "status:.*(error|degraded)"; then
     echo "ERROR: cloud-init reported failure:" >&2
     echo "${CI_OUTPUT}" >&2
     echo "Check /var/log/cloud-init-coder.log on the server." >&2

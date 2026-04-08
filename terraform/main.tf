@@ -1,3 +1,10 @@
+check "custom_domain_requires_cloudflare_token" {
+  assert {
+    condition     = var.coder_domain == "" || var.cloudflare_api_token != ""
+    error_message = "cloudflare_api_token is required when coder_domain is set. Caddy needs it for ACME DNS-01 TLS certificate issuance."
+  }
+}
+
 # Requires: the machine running Terraform must be on the same tailnet
 resource "terraform_data" "provision" {
   # Store server_name so the destroy provisioner can reference it via self.output

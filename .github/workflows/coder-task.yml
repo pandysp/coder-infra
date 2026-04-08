@@ -9,6 +9,13 @@ jobs:
     if: github.event.label.name == 'coder'
     runs-on: ubuntu-latest
     steps:
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
       - name: Install Coder CLI
         run: curl -fsSL https://coder.com/install.sh | sh -s -- --version 2.31.7
 
@@ -22,6 +29,15 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
+
+          if [ -z "${CODER_URL}" ]; then
+            echo "::error::CODER_URL secret is not configured. Set it in repo Settings > Secrets."
+            exit 1
+          fi
+          if [ -z "${CODER_SESSION_TOKEN}" ]; then
+            echo "::error::CODER_SESSION_TOKEN secret is not configured. Set it in repo Settings > Secrets."
+            exit 1
+          fi
 
           REPO_NAME="${REPO#*/}"
           ISSUE_SLUG="$(printf '%s' "${ISSUE_TITLE}" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-//; s/-$//' | cut -c1-40)"

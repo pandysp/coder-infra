@@ -29,13 +29,9 @@ CUSTOM_DOMAIN_CONFIGURED=""
 
 if [ -f "${COMPOSE_FILE}" ]; then
     ACCESS_URL=$(awk -F'"' '/CODER_ACCESS_URL:/ {print $2; exit}' "${COMPOSE_FILE}")
-    if grep -q 'CODER_WILDCARD_ACCESS_URL:' "${COMPOSE_FILE}"; then
+    if grep -q 'CODER_WILDCARD_ACCESS_URL:' "${COMPOSE_FILE}" || grep -q '0.0.0.0:443:443' "${COMPOSE_FILE}"; then
         CUSTOM_DOMAIN_CONFIGURED="true"
     fi
-fi
-
-if [ -z "${CUSTOM_DOMAIN_CONFIGURED}" ] && ss -ltn | grep -q ':443 '; then
-    CUSTOM_DOMAIN_CONFIGURED="true"
 fi
 
 echo "=== SSH OK ==="
@@ -58,7 +54,16 @@ fi
 
 echo "=== ROUTING ==="
 if [ -n "${CUSTOM_DOMAIN_CONFIGURED}" ]; then
-    curl -sf https://localhost:443/api/v2/buildinfo -k | jq -r '"HTTPS on 443: Coder " + .version'
+    # Extract domain from access URL (strip https://) for SNI-aware curl.
+    # First curl uses -k (accept any cert) to confirm the service is up.
+    # Second curl omits -k to verify the cert is actually trusted.
+    DOMAIN="${ACCESS_URL#https://}"
+    curl -sfk --resolve "${DOMAIN}:443:127.0.0.1" "https://${DOMAIN}/api/v2/buildinfo" | jq -r '"HTTPS on 443: Coder " + .version'
+    if curl -sf --resolve "${DOMAIN}:443:127.0.0.1" "https://${DOMAIN}/api/v2/buildinfo" --max-time 5 >/dev/null 2>&1; then
+        echo "TLS certificate: valid"
+    else
+        echo "TLS certificate: WARNING - not yet valid (ACME may still be in progress, or check cloudflare_api_token)"
+    fi
 else
     tailscale serve status 2>&1 | head -5
 fi
@@ -109,6 +114,9 @@ ACCESS_URL=$(echo "$REMOTE_OUTPUT" | sed -n '/=== ACCESS_URL ===/,/=== FQDN ===/
 TAILSCALE_FQDN=$(echo "$REMOTE_OUTPUT" | sed -n '/=== FQDN ===/,$ { /===/d; p; }' | head -1)
 
 if [ -z "${ACCESS_URL}" ]; then
+    if [ "${ROUTING_MODE}" = "custom-domain" ]; then
+        echo "WARNING: Custom domain routing active but could not parse CODER_ACCESS_URL from docker-compose.yml" >&2
+    fi
     ACCESS_URL="https://${TAILSCALE_FQDN}"
 fi
 

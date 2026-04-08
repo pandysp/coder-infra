@@ -230,9 +230,11 @@ resource "coder_script" "system_setup" {
       sudo apt-get install -y -qq ripgrep fd-find tree
     fi
     if ! command -v gh &> /dev/null; then
-      curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+      sudo mkdir -p -m 755 /etc/apt/keyrings
+      curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null
+      sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
       ARCH="$(dpkg --print-architecture)"
-      echo "deb [arch=$ARCH signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+      echo "deb [arch=$ARCH signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
       sudo apt-get update -qq
       sudo apt-get install -y -qq gh
     fi
@@ -362,10 +364,10 @@ resource "docker_container" "workspace" {
   cpu_shares = data.coder_parameter.cpu.value * 1024
   memory     = data.coder_parameter.memory.value * 1024
 
-  env = [
-    "CODER_AGENT_TOKEN=${coder_agent.main.token}",
-    "GITHUB_TOKEN=${data.coder_external_auth.github.access_token}",
-  ]
+  env = concat(
+    ["CODER_AGENT_TOKEN=${coder_agent.main.token}"],
+    data.coder_external_auth.github.access_token != "" ? ["GITHUB_TOKEN=${data.coder_external_auth.github.access_token}"] : [],
+  )
 
   host {
     host = "host.docker.internal"

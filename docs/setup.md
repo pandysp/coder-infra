@@ -142,21 +142,28 @@ After re-provisioning, users can connect their GitHub account via the Coder dash
 
 To enable wildcard subdomain routing for apps like code-server and Web Preview, point a custom domain at the server's Tailscale IP and let Caddy terminate TLS with Cloudflare DNS-01.
 
-1. In Cloudflare DNS, create two `A` records in DNS-only mode:
-   - `coder.spannagel.dev` -> `<tailscale-ip>`
-   - `*.coder.spannagel.dev` -> `<tailscale-ip>`
-2. Add these variables to `terraform.tfvars`:
+> **Note:** The DNS records point at a Tailscale IP (100.x.y.z), which is only reachable from devices on your tailnet. This gives you wildcard subdomain routing and nicer URLs for tailnet members — it does not make Coder publicly accessible.
+
+1. In [Cloudflare DNS](https://dash.cloudflare.com/), create two `A` records (DNS-only mode, not proxied):
+   - `coder.yourdomain.com` -> `<tailscale-ip>`
+   - `*.coder.yourdomain.com` -> `<tailscale-ip>`
+
+   Get your server's Tailscale IP with: `tailscale ip -4 <server-name>`
+
+2. Create a Cloudflare API token with `Zone > DNS > Edit` permission for your zone.
+
+3. Add these variables to `terraform.tfvars`:
 
 ```hcl
-coder_domain         = "coder.spannagel.dev"
+coder_domain         = "coder.yourdomain.com"
 cloudflare_api_token = "<cloudflare-token-with-zone-dns-edit>"
 ```
 
-3. Re-provision so Ansible rebuilds Caddy with the Cloudflare DNS plugin:
+4. Re-provision so Ansible rebuilds Caddy with the Cloudflare DNS plugin:
 
 ```hcl
 # terraform.tfvars
-force_reprovision = "2026-04-03-custom-domain"
+force_reprovision = "2026-04-04-custom-domain"
 ```
 
 ```bash
@@ -164,7 +171,7 @@ cd terraform
 tofu apply
 ```
 
-When `coder_domain` is set, Coder uses `https://coder.spannagel.dev`, Caddy binds `443` directly, and Tailscale Serve is disabled.
+When `coder_domain` is set, Coder uses `https://coder.yourdomain.com`, Caddy binds port `443` directly with a wildcard TLS cert, and Tailscale Serve is disabled. Port 80 remains open on the Docker bridge for workspace container agent bootstrapping — tailnet peers can also reach it, but all traffic is already encrypted at the WireGuard layer.
 
 ## MCP Server (Optional)
 
