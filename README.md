@@ -1,5 +1,7 @@
 # coder-infra
 
+[![Coder Version](https://img.shields.io/badge/coder-v2.31.7-blue)](https://github.com/coder/coder/releases/tag/v2.31.7)
+
 Self-hosted AI coding agents on a EUR 15/month VPS. Fire tasks, close the lid, review PRs.
 
 An open-source reference setup for running [Coder](https://coder.com) + [Claude Code](https://claude.ai/claude-code) on Hetzner with [Tailscale](https://tailscale.com) zero-trust networking.
