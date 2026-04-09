@@ -1,0 +1,139 @@
+services:
+  prometheus:
+    image: prom/prometheus:v3.4.0
+    container_name: monitoring-prometheus
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/rules/:/etc/prometheus/rules/:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time={{ monitoring_prometheus_retention }}'
+      - '--storage.tsdb.retention.size={{ monitoring_prometheus_retention_size }}'
+      - '--web.listen-address=0.0.0.0:9090'
+      - '--web.enable-lifecycle'
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:9090:9090"
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.6.0
+    container_name: monitoring-grafana
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: "{{ monitoring_grafana_admin_password }}"
+      GF_SERVER_ROOT_URL: "{{ monitoring_grafana_root_url | default('http://localhost:3000') }}"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    ports:
+      - "127.0.0.1:3000:3000"
+    deploy:
+      resources:
+        limits:
+          memory: 192M
+    restart: unless-stopped
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    container_name: monitoring-alertmanager
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    ports:
+      - "127.0.0.1:9093:9093"
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+    restart: unless-stopped
+
+  node_exporter:
+    image: prom/node-exporter:v1.9.0
+    container_name: monitoring-node-exporter
+    command:
+      - '--path.rootfs=/host'
+      - '--collector.systemd'
+      - '--collector.processes'
+      - '--web.listen-address=127.0.0.1:9100'
+    pid: host
+    network_mode: host
+    volumes:
+      - /:/host:ro,rslave
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+    restart: unless-stopped
+
+  postgres_exporter:
+    image: prometheuscommunity/postgres-exporter:v0.17.0
+    container_name: monitoring-postgres-exporter
+    environment:
+      DATA_SOURCE_NAME: "postgresql://coder:{{ coder_pg_password }}@host.docker.internal:5432/coder?sslmode=disable"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+    restart: unless-stopped
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.52.1
+    container_name: monitoring-cadvisor
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+    deploy:
+      resources:
+        limits:
+          memory: 96M
+    restart: unless-stopped
+
+{% if monitoring_loki_enabled | default(false) | bool %}
+  loki:
+    image: grafana/loki:3.5.0
+    container_name: monitoring-loki
+    volumes:
+      - ./loki/loki.yml:/etc/loki/config.yaml:ro
+      - loki_data:/loki
+    command: -config.file=/etc/loki/config.yaml
+    ports:
+      - "127.0.0.1:3100:3100"
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+    restart: unless-stopped
+
+  promtail:
+    image: grafana/promtail:3.5.0
+    container_name: monitoring-promtail
+    volumes:
+      - ./promtail/promtail.yml:/etc/promtail/config.yml:ro
+      - /var/log:/var/log:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /run/log/journal:/run/log/journal:ro
+      - /etc/machine-id:/etc/machine-id:ro
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    restart: unless-stopped
+{% endif %}
+
+volumes:
+  prometheus_data:
+  grafana_data:
+{% if monitoring_loki_enabled | default(false) | bool %}
+  loki_data:
+{% endif %}

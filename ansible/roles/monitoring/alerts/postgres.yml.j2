@@ -1,0 +1,29 @@
+groups:
+  - name: postgres
+    rules:
+      - alert: PostgresDown
+        expr: pg_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL is down"
+          description: "PostgreSQL instance is not responding."
+
+      - alert: PostgresConnectionsHigh
+        expr: pg_stat_activity_count / pg_settings_max_connections > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL connections above 80%"
+          description: "{{ '{{' }} $value | humanizePercentage {{ '}}' }} of max connections in use."
+
+      - alert: PostgresNotificationQueueFilling
+        expr: pg_notification_queue_usage > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL notification queue filling up"
+          description: "LISTEN/NOTIFY queue at {{ '{{' }} $value | humanizePercentage {{ '}}' }}. Coder uses this heavily."

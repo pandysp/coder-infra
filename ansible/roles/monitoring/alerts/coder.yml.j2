@@ -1,0 +1,42 @@
+groups:
+  - name: coder
+    rules:
+      - alert: CoderWorkspaceBuildFailures
+        expr: increase(coderd_workspace_builds_total{status="failed"}[10m]) > 5
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High workspace build failure rate"
+          description: "{{ '{{' }} $value {{ '}}' }} workspace builds failed in the last 10 minutes."
+
+      - alert: CoderAPIErrorRate
+        expr: |
+          sum(rate(coderd_api_requests_processed_total{code=~"5.."}[5m]))
+          /
+          sum(rate(coderd_api_requests_processed_total[5m]))
+          > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Coder API error rate above 5%"
+          description: "API 5xx error rate is {{ '{{' }} $value | humanizePercentage {{ '}}' }}."
+
+      - alert: CoderProvisionerQueueBacklog
+        expr: coderd_provisioner_job_queue_wait_seconds > 60
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Provisioner queue backlog"
+          description: "Jobs waiting more than 60s in the provisioner queue."
+
+      - alert: CoderAgentDisconnected
+        expr: coderd_agents_up == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Coder workspace agent disconnected"
+          description: "Workspace agent has been disconnected for more than 5 minutes."

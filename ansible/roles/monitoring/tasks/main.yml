@@ -1,0 +1,141 @@
+---
+- name: Deploy monitoring stack
+  when: monitoring_enabled | default(false) | bool
+  block:
+    - name: Create monitoring base directory
+      ansible.builtin.file:
+        path: "{{ monitoring_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Create monitoring subdirectories
+      ansible.builtin.file:
+        path: "{{ monitoring_dir }}/{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - prometheus
+        - prometheus/rules
+        - grafana/provisioning/datasources
+        - grafana/provisioning/dashboards
+        - grafana/dashboards
+        - alertmanager
+        - loki
+        - promtail
+
+    - name: Template Prometheus configuration
+      ansible.builtin.template:
+        src: prometheus.yml.j2
+        dest: "{{ monitoring_dir }}/prometheus/prometheus.yml"
+        mode: "0644"
+      register: prometheus_config
+
+    - name: Template Coder alert rules
+      ansible.builtin.template:
+        src: "{{ item }}"
+        dest: "{{ monitoring_dir }}/prometheus/rules/{{ item | basename | regex_replace('\\.j2$', '') }}"
+        mode: "0644"
+      loop:
+        - alerts/coder.yml.j2
+        - alerts/node.yml.j2
+        - alerts/postgres.yml.j2
+      register: alert_rules
+
+    - name: Template Alertmanager configuration
+      ansible.builtin.template:
+        src: alertmanager.yml.j2
+        dest: "{{ monitoring_dir }}/alertmanager/alertmanager.yml"
+        mode: "0644"
+      register: alertmanager_config
+
+    - name: Template Grafana datasources
+      ansible.builtin.template:
+        src: grafana-datasources.yml.j2
+        dest: "{{ monitoring_dir }}/grafana/provisioning/datasources/datasources.yml"
+        mode: "0644"
+
+    - name: Template Grafana dashboard provisioning config
+      ansible.builtin.template:
+        src: grafana-dashboards.yml.j2
+        dest: "{{ monitoring_dir }}/grafana/provisioning/dashboards/dashboards.yml"
+        mode: "0644"
+
+    - name: Copy Grafana dashboard JSON files
+      ansible.builtin.copy:
+        src: "dashboards/"
+        dest: "{{ monitoring_dir }}/grafana/dashboards/"
+        mode: "0644"
+
+    - name: Template Loki configuration
+      ansible.builtin.template:
+        src: loki.yml.j2
+        dest: "{{ monitoring_dir }}/loki/loki.yml"
+        mode: "0644"
+      when: monitoring_loki_enabled | default(false) | bool
+
+    - name: Template promtail configuration
+      ansible.builtin.template:
+        src: promtail.yml.j2
+        dest: "{{ monitoring_dir }}/promtail/promtail.yml"
+        mode: "0644"
+      when: monitoring_loki_enabled | default(false) | bool
+
+    - name: Template Docker Compose file for monitoring
+      ansible.builtin.template:
+        src: docker-compose.monitoring.yml.j2
+        dest: "{{ monitoring_dir }}/docker-compose.yml"
+        mode: "0644"
+      register: compose_config
+
+    - name: Start monitoring stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ monitoring_dir }}"
+        pull: missing
+        state: present
+      when: compose_config.changed or prometheus_config.changed or alert_rules.changed or alertmanager_config.changed
+
+    - name: Ensure monitoring stack is running
+      community.docker.docker_compose_v2:
+        project_src: "{{ monitoring_dir }}"
+        state: present
+
+    - name: Restart Prometheus when config changed
+      community.docker.docker_compose_v2:
+        project_src: "{{ monitoring_dir }}"
+        services:
+          - prometheus
+        state: restarted
+      when: prometheus_config.changed or alert_rules.changed
+
+    - name: Restart Alertmanager when config changed
+      community.docker.docker_compose_v2:
+        project_src: "{{ monitoring_dir }}"
+        services:
+          - alertmanager
+        state: restarted
+      when: alertmanager_config.changed
+
+    - name: Wait for Grafana to be ready
+      ansible.builtin.uri:
+        url: "http://localhost:3000/api/health"
+        method: GET
+        status_code: 200
+      register: grafana_health
+      retries: 30
+      delay: 5
+      until: grafana_health.status == 200
+
+- name: Tear down monitoring stack
+  when: not (monitoring_enabled | default(false) | bool)
+  block:
+    - name: Check if monitoring compose file exists
+      ansible.builtin.stat:
+        path: "{{ monitoring_dir }}/docker-compose.yml"
+      register: monitoring_compose_file
+
+    - name: Stop and remove monitoring stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ monitoring_dir }}"
+        state: absent
+        remove_volumes: true
+      when: monitoring_compose_file.stat.exists

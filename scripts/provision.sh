@@ -16,6 +16,8 @@ GITHUB_OAUTH_CLIENT_ID="${GITHUB_OAUTH_CLIENT_ID:-}"
 GITHUB_OAUTH_CLIENT_SECRET="${GITHUB_OAUTH_CLIENT_SECRET:-}"
 CODER_DOMAIN="${CODER_DOMAIN:-}"
 CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN:-}"
+PROVISION_GRAFANA_ADMIN_PASSWORD="${PROVISION_GRAFANA_ADMIN_PASSWORD:-}"
+PROVISION_ALERTMANAGER_WEBHOOK_URL="${PROVISION_ALERTMANAGER_WEBHOOK_URL:-}"
 
 # Write SSH key and secrets to temp files
 SSH_KEY_FILE=$(mktemp)
@@ -43,6 +45,8 @@ jq -n \
   --arg github_oauth_client_secret "${GITHUB_OAUTH_CLIENT_SECRET}" \
   --arg coder_domain "${CODER_DOMAIN}" \
   --arg cloudflare_api_token "${CLOUDFLARE_API_TOKEN}" \
+  --arg monitoring_grafana_admin_password "${PROVISION_GRAFANA_ADMIN_PASSWORD}" \
+  --arg monitoring_alertmanager_webhook_url "${PROVISION_ALERTMANAGER_WEBHOOK_URL}" \
   '$ARGS.named' > "${VARS_FILE}"
 chmod 600 "${VARS_FILE}"
 

@@ -122,3 +122,29 @@ fi
 
 echo "=== All checks passed ==="
 echo "Coder URL: ${ACCESS_URL}"
+
+# Monitoring checks (run locally if MONITORING_ENABLED is set, or probe remote if connected)
+if [ "${MONITORING_ENABLED:-}" = "true" ]; then
+  echo ""
+  echo "7. Monitoring..."
+  echo "Checking Prometheus..."
+  if curl -sf http://localhost:9090/-/healthy > /dev/null 2>&1; then
+    echo "   ✓ Prometheus healthy"
+  else
+    echo "   ✗ Prometheus not healthy"
+  fi
+
+  echo "Checking Grafana..."
+  if curl -sf http://localhost:3000/api/health > /dev/null 2>&1; then
+    echo "   ✓ Grafana healthy"
+  else
+    echo "   ✗ Grafana not healthy"
+  fi
+
+  echo "Checking Coder metrics..."
+  if curl -sf http://localhost:2112/metrics 2>/dev/null | head -1 > /dev/null; then
+    echo "   ✓ Coder metrics exposed"
+  else
+    echo "   ✗ Coder metrics not available"
+  fi
+fi

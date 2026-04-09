@@ -1,0 +1,38 @@
+groups:
+  - name: node
+    rules:
+      - alert: HostHighMemory
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) > 0.85
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Host memory usage above 85%"
+          description: "Memory usage is {{ '{{' }} $value | humanizePercentage {{ '}}' }}. On an 8GB box this is critical."
+
+      - alert: HostHighCPU
+        expr: 100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Host CPU usage above 85%"
+          description: "CPU usage is {{ '{{' }} $value {{ '}}' }}%."
+
+      - alert: HostDiskSpaceLow
+        expr: (1 - (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"})) > 0.80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Host disk space above 80%"
+          description: "Disk usage on / is {{ '{{' }} $value | humanizePercentage {{ '}}' }}."
+
+      - alert: HostSwapHigh
+        expr: (node_memory_SwapTotal_bytes - node_memory_SwapFree_bytes) / node_memory_SwapTotal_bytes > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Host swap usage above 50%"
+          description: "Swap usage is {{ '{{' }} $value | humanizePercentage {{ '}}' }}. Early warning for memory pressure on 8GB box."

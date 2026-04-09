@@ -9,3 +9,6 @@
     - sysbox
     - mosh
     - coder
+    - role: monitoring
+      tags: [monitoring]
+      when: monitoring_enabled | default(false) | bool

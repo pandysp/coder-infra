@@ -22,3 +22,13 @@ cloudflare_api_token: ""
 # GitHub External Auth (optional — requires a GitHub OAuth App)
 github_oauth_client_id: ""
 github_oauth_client_secret: ""
+
+# Monitoring
+monitoring_enabled: true
+monitoring_dir: /opt/monitoring
+monitoring_prometheus_retention: "15d"
+monitoring_prometheus_retention_size: "5GB"
+monitoring_grafana_admin_password: ""
+monitoring_alertmanager_webhook_url: ""
+monitoring_loki_enabled: false
+monitoring_loki_retention: "168h"

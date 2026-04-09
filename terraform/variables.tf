@@ -76,3 +76,16 @@ variable "force_reprovision" {
   description = "Change this value to re-run Ansible without replacing the server. Useful after rotating secrets."
   default     = ""
 }
+
+variable "grafana_admin_password" {
+  description = "Admin password for Grafana"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "alertmanager_webhook_url" {
+  description = "Webhook URL for Alertmanager notifications"
+  type        = string
+  default     = ""
+}

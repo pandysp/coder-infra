@@ -64,7 +64,12 @@ coder-infra/
 │       │   ├── templates/docker-compose.yml.j2
 │       │   ├── templates/Caddyfile.j2
 │       │   └── templates/Dockerfile.caddy
-│       └── mosh/tasks/main.yml       # Mosh server (optional)
+│       ├── mosh/tasks/main.yml       # Mosh server (optional)
+│       └── monitoring/               # Observability stack via Docker Compose
+│           ├── tasks/main.yml
+│           ├── templates/            # Jinja2 config templates
+│           ├── alerts/               # Prometheus alert rule templates
+│           └── files/dashboards/     # Grafana dashboard JSON files
 ├── Makefile                          # validate, lint, push-templates, verify
 ├── templates/                        # Coder workspace templates (Terraform)
 │   ├── modules/workspace/            # Shared module (agent, params, container)
@@ -92,6 +97,8 @@ github_oauth_client_secret (sensitive, optional) — GitHub OAuth App client sec
 coder_domain (optional) — Custom Coder domain that enables wildcard subdomain routing
 cloudflare_api_token (sensitive, optional) — Cloudflare DNS token for ACME DNS-01 when coder_domain is set
 force_reprovision — change to re-run Ansible without server replacement
+grafana_admin_password (sensitive, optional) — Grafana admin password (defaults to empty → set post-deploy)
+alertmanager_webhook_url (optional) — Webhook URL for Alertmanager critical alert notifications
 ```
 
 ## Key Patterns
@@ -117,6 +124,74 @@ force_reprovision — change to re-run Ansible without server replacement
 20. Workspace templates use dynamic parameters (`form_type`, `order`, regex validation) instead of splitting simple UX differences into separate templates
 21. `data "coder_workspace_preset"` defines Quick Task, Full Development, and Autonomous Agent with all parameter values explicit
 22. `module "code_server"` adds a browser IDE app on a subdomain alongside Claude Code and Web Preview
+
+## Monitoring
+
+### Architecture
+The observability stack is a second independent Docker Compose project at `/opt/monitoring/`. It does **not** share a Docker network with the Coder stack. Instead, monitoring services reach Coder and Postgres via `host.docker.internal` (host-gateway), and node_exporter uses `network_mode: host`. This avoids cross-stack ordering dependencies.
+
+Services and memory limits (864MB total, 1.4GB with Loki):
+- **Prometheus** (384M) — scrapes Coder (`:2112`), node (`:9100`), Postgres exporter (`:9187`), cAdvisor (`:8080`)
+- **Grafana** (192M) — dashboards and alerting UI, port `127.0.0.1:3000`
+- **Alertmanager** (64M) — alert routing, port `127.0.0.1:9093`
+- **node_exporter** (64M) — host CPU, memory, disk, network metrics
+- **postgres_exporter** (64M) — PostgreSQL metrics via `host.docker.internal:5432`
+- **cAdvisor** (96M) — Docker container resource metrics
+- **Loki** (384M, optional) — log aggregation, disabled by default
+- **promtail** (128M, optional) — log shipping to Loki
+
+All ports bound to `127.0.0.1` — access via Tailscale SSH tunnel or Tailscale Serve.
+
+### Accessing Grafana
+Via SSH tunnel: `ssh -L 3000:localhost:3000 root@<server-name>`
+Then open `http://localhost:3000` (admin / password set in `grafana_admin_password`).
+
+Via Tailscale Serve (persistent): `tailscale serve --bg --https=3000 http://localhost:3000`
+Then access at `https://<server-name>:3000` from any tailnet device.
+
+### Key Dashboards
+- **Coder Overview** (`coder-overview`) — API health, workspace builds, provisioner queue, agent connectivity
+- **Node Exporter Full** — Host CPU, memory, disk I/O, network, filesystem
+- **PostgreSQL** — Connections, query duration, cache hit ratio, replication lag
+
+### Alert Rules
+- `CoderWorkspaceBuildFailures` — >5 failed builds in 10 minutes (warning)
+- `CoderAPIErrorRate` — 5xx rate >5% for 5 minutes (warning)
+- `CoderProvisionerQueueBacklog` — jobs waiting >60s (warning)
+- `CoderAgentDisconnected` — agent offline >5 minutes (critical)
+- `HostHighMemory` — memory >85% for 5 minutes (critical — tight on 8GB box)
+- `HostHighCPU` — CPU >85% for 5 minutes (warning)
+- `HostDiskSpaceLow` — disk >80% on / (warning)
+- `HostSwapHigh` — swap >50% (warning — early memory pressure indicator)
+- `PostgresDown` — pg_up == 0 for 1 minute (critical)
+- `PostgresConnectionsHigh` — connections >80% of max_connections (warning)
+- `PostgresNotificationQueueFilling` — LISTEN/NOTIFY queue >50% (warning — Coder uses this heavily)
+
+### Enabling Loki
+Set `monitoring_loki_enabled: true` in `ansible/group_vars/all.yml`, then re-run Ansible.
+Loki adds 512MB memory usage (Loki 384M + promtail 128M). Retention defaults to 7 days (`168h`).
+
+### Day-2 Operations
+```bash
+# Check monitoring stack status
+cd /opt/monitoring && docker compose ps
+
+# View logs for a specific service
+docker compose -f /opt/monitoring/docker-compose.yml logs -f prometheus
+
+# Check disk usage (Prometheus TSDB + Grafana data)
+du -sh /opt/monitoring/
+docker system df
+
+# Reload Prometheus config without restart (requires --web.enable-lifecycle)
+curl -X POST http://localhost:9090/-/reload
+
+# Restart entire monitoring stack
+cd /opt/monitoring && docker compose restart
+
+# Disable monitoring (tears down stack, keeps data volumes)
+# Set monitoring_enabled: false in group_vars/all.yml, then re-run Ansible
+```
 
 ## Coding Style
 - Terraform: HCL with consistent formatting, one resource per logical file
