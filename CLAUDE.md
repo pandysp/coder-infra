@@ -20,8 +20,7 @@ Hetzner CX33 (4 vCPU, 8GB RAM, 100GB NVMe, Ubuntu 24.04)
   ├── Tailscale (networking, zero-trust access)
   ├── Docker + Sysbox (container runtimes)
   └── Coder (Docker Compose: coder + postgres + Caddy (TLS via Cloudflare or Tailscale Serve))
-        ├── Workspace template: base-dev (Tasks + CC + code-server + dotfiles + git-clone + Node.js)
-        └── Workspace template: docker-dev (base-dev + DinD via Sysbox)
+        └── Workspace template: dev (Tasks + CC + code-server + dotfiles + git-clone + Node.js + DinD via Sysbox)
 ```
 
 ## Reference: Coder docker-claude template
@@ -73,8 +72,14 @@ coder-infra/
 ├── Makefile                          # validate, lint, push-templates, verify
 ├── templates/                        # Coder workspace templates (Terraform)
 │   ├── modules/workspace/            # Shared module (agent, params, container)
-│   ├── base-dev/main.tf              # Thin wrapper (enable_docker_in_docker=false)
-│   └── docker-dev/main.tf            # Thin wrapper (enable_docker_in_docker=true)
+│   │   ├── main.tf
+│   │   └── variables.tf
+│   └── examples/                     # Reference templates (copy to get started)
+│       └── base-dev/
+│           ├── main.tf               # Thin wrapper: module "workspace" { ... }
+│           └── modules -> ../../modules
+# Active templates live at templates/<name>/ — gitignored, copy from examples/
+# Run: make new-template NAME=dev
 ├── scripts/
 │   ├── provision.sh                  # Ansible wrapper (called by Terraform)
 │   └── verify.sh                     # Post-deploy health check
@@ -111,7 +116,7 @@ alertmanager_webhook_url (optional) — Webhook URL for Alertmanager critical al
 7. Local state (`terraform.tfstate`) by default — optional remote backend for encryption
 8. `force_reprovision` variable for secret rotation without server replacement
 9. Destroy-time provisioner runs `tailscale logout` (graceful fallback if SSH fails)
-10. Workspace templates use shared module via symlinks; push with `make push-templates` (tar -cvh dereferences)
+10. Workspace templates: reference templates live in `templates/examples/`; active templates in `templates/<name>/` are gitignored. Use `make new-template NAME=dev` to copy an example, then `make push-dev` to push. Push copies modules into a temp dir (no symlink needed for push; symlink is for local `tofu validate/plan`)
 11. Workspace containers use chained `replace()`: first rewrites the external Coder access URL → `http://host.docker.internal:80`, then replaces remaining `localhost/127.0.0.1` references
 12. DNS: `["100.100.100.100", "1.1.1.1"]` — MagicDNS for Tailscale names, Cloudflare for internet
 13. Template uses `coder_script` resources instead of monolithic `startup_script` for per-step dashboard progress

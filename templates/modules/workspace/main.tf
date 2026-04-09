@@ -271,6 +271,54 @@ resource "coder_script" "docker_cli" {
   EOT
 }
 
+resource "coder_script" "tailscale" {
+  count              = var.enable_tailscale ? 1 : 0
+  agent_id           = coder_agent.main.id
+  display_name       = "Tailscale"
+  icon               = "/icon/terminal.svg"
+  run_on_start       = true
+  start_blocks_login = true
+  timeout            = 120
+  script             = <<-EOT
+    #!/bin/bash
+    set -eo pipefail
+    mkdir -p /home/coder/.tailscale
+    if ! command -v tailscale &> /dev/null; then
+      curl -fsSL https://tailscale.com/install.sh | sh
+    fi
+    sudo tailscaled --state=/home/coder/.tailscale/state &>/tmp/tailscaled.log &
+    for i in $(seq 1 30); do
+      tailscale status &>/dev/null && break
+      sleep 1
+    done
+    sudo tailscale up --authkey="$TS_AUTHKEY" --hostname="coder-$(hostname)" --reset
+  EOT
+}
+
+resource "coder_script" "infra_tools" {
+  count              = var.enable_infra_tools ? 1 : 0
+  agent_id           = coder_agent.main.id
+  display_name       = "Infra Tools"
+  icon               = "/icon/terminal.svg"
+  run_on_start       = true
+  start_blocks_login = true
+  timeout            = 300
+  script             = <<-EOT
+    #!/bin/bash
+    set -eo pipefail
+    if ! command -v tofu &> /dev/null; then
+      curl -fsSL https://get.opentofu.org/install-opentofu.sh | sudo bash -s -- --install-method deb
+    fi
+    if ! command -v ansible &> /dev/null; then
+      sudo apt-get update -qq
+      sudo apt-get install -y -qq python3-pip python3-venv
+      python3 -m venv /home/coder/.infra-venv
+      /home/coder/.infra-venv/bin/pip install ansible hcloud
+      echo 'export PATH="/home/coder/.infra-venv/bin:$PATH"' >> /home/coder/.bashrc
+    fi
+  EOT
+}
+
 module "claude_code" {
   source                       = "registry.coder.com/coder/claude-code/coder"
   version                      = "4.9.1"
@@ -367,6 +415,7 @@ resource "docker_container" "workspace" {
   env = concat(
     ["CODER_AGENT_TOKEN=${coder_agent.main.token}"],
     data.coder_external_auth.github.access_token != "" ? ["GITHUB_TOKEN=${data.coder_external_auth.github.access_token}"] : [],
+    var.enable_tailscale && var.tailscale_auth_key != "" ? ["TS_AUTHKEY=${var.tailscale_auth_key}"] : [],
   )
 
   host {
@@ -378,6 +427,13 @@ resource "docker_container" "workspace" {
     container_path = "/home/coder/"
     volume_name    = docker_volume.home.name
     read_only      = false
+  }
+
+  dynamic "capabilities" {
+    for_each = var.enable_tailscale ? [1] : []
+    content {
+      add = ["NET_ADMIN", "NET_RAW"]
+    }
   }
 
   # Workspace containers can't reach the Tailscale FQDN directly (they're not

@@ -24,7 +24,7 @@ This repo is a reference implementation proving the full stack works on a single
 **Development Environment Features**
 - **code-server** -- full VS Code in the browser via subdomain
 - **Web Preview** -- live preview of web apps via wildcard subdomain routing
-- **Docker-in-Docker** -- nested containers via Sysbox (docker-dev template)
+- **Docker-in-Docker** -- nested containers via Sysbox (always on)
 - **Git integration** -- GitHub OAuth for seamless auth, or SSH keys
 - **Dotfiles** -- personal environment customization via Coder module
 - **Persistent storage** -- Docker volumes survive workspace restarts
@@ -47,7 +47,7 @@ This repo is a reference implementation proving the full stack works on a single
 | Decision | Default | Alternative | When to switch |
 |----------|---------|-------------|----------------|
 | **TLS/Routing** | Tailscale Serve | Custom domain + Cloudflare | You want wildcard subdomain routing for web previews and code-server |
-| **Docker-in-Docker** | Disabled (base-dev) | Enabled (docker-dev) | Workspaces need to build/run containers |
+| **Docker-in-Docker** | Enabled | Disabled | You don't need nested containers (saves Sysbox overhead) |
 | **GitHub OAuth** | Disabled | Enabled | You want seamless git auth in workspaces |
 | **Claude Auth** | Setup token | + API key | You want direct API access alongside subscription auth |
 
@@ -67,15 +67,16 @@ tofu init && tofu apply
 # 3. Verify
 cd .. && bash scripts/verify.sh
 
-# 4. Log in and push templates
+# 4. Log in and create your template
 coder login https://<your-server>.ts.net  # or https://coder.yourdomain.com
-make push-templates
+make new-template NAME=dev
+make push-dev
 ```
 
 Then create a workspace:
 
 ```bash
-coder create my-workspace --template base-dev
+coder create my-workspace --template dev
 ```
 
 ## Architecture
@@ -91,8 +92,7 @@ Hetzner Cloud (no public inbound ports)
     ├── PostgreSQL (Coder state)
     ├── UFW (Tailscale-only firewall)
     └── Workspace containers
-          ├── base-dev   (Claude Code + code-server + Node.js + tools)
-          └── docker-dev (base-dev + Docker daemon via Sysbox)
+          └── dev  (Claude Code + code-server + Node.js + tools + Docker via Sysbox)
 ```
 
 ## Stack
@@ -109,10 +109,12 @@ Hetzner Cloud (no public inbound ports)
 ## Development
 
 ```bash
-make help           # Show all targets
-make validate       # Lint Terraform + Ansible
-make push-templates # Push templates to Coder
-make verify         # Post-deploy health checks
+make help                    # Show all targets
+make validate                # Lint Terraform + Ansible
+make new-template NAME=dev   # Create a new template from the reference example
+make push-dev                # Push your dev template to Coder
+make push-templates          # Push all active templates (auto-discovered)
+make verify                  # Post-deploy health checks
 ```
 
 ## License

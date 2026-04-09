@@ -21,11 +21,8 @@ jobs:
       - name: Validate infrastructure
         run: cd terraform && tofu init -backend=false && tofu validate
 
-      - name: Validate base-dev template
-        run: cd templates/base-dev && tofu init -backend=false && tofu validate
-
-      - name: Validate docker-dev template
-        run: cd templates/docker-dev && tofu init -backend=false && tofu validate
+      - name: Validate reference template
+        run: cd templates/examples/base-dev && tofu init -backend=false && tofu validate
 
   ansible:
     name: Ansible syntax check

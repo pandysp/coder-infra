@@ -1,4 +1,4 @@
-.PHONY: validate lint push-templates push-base-dev push-docker-dev
+.PHONY: validate lint push-templates new-template
 
 # --- Validation --------------------------------------------------------------
 
@@ -6,8 +6,7 @@ validate: validate-terraform validate-ansible ## Run all validation checks
 
 validate-terraform: ## Validate Terraform/OpenTofu configs
 	cd terraform && tofu init -backend=false && tofu validate
-	cd templates/base-dev && tofu init -backend=false && tofu validate
-	cd templates/docker-dev && tofu init -backend=false && tofu validate
+	cd templates/examples/base-dev && tofu init -backend=false && tofu validate
 
 validate-ansible: ## Validate Ansible playbook (installs Galaxy deps first)
 	cd ansible && ansible-galaxy collection install -r requirements.yml
@@ -15,25 +14,37 @@ validate-ansible: ## Validate Ansible playbook (installs Galaxy deps first)
 
 lint: validate ## Alias for validate
 
-# --- Template push (dereferences symlinks for shared module) -----------------
-# Clean .terraform to avoid uploading darwin provider binaries (~18MB) to the
-# linux server. The Coder provisioner re-downloads the correct platform binaries.
-# Template variables are read from terraform.tfvars (claude_setup_token is
-# required for Claude Code auth in workspaces).
+# --- Template push -----------------------------------------------------------
+# Discovers templates dynamically: any templates/<name>/main.tf (excluding
+# modules/ and examples/) is a pushable template. Copies the shared module
+# into a temp dir so symlinks are not required for push.
 
 TFVARS := terraform/terraform.tfvars
 SETUP_TOKEN := $(shell grep claude_setup_token $(TFVARS) 2>/dev/null | sed 's/.*= *"//;s/"//')
 TEMPLATE_VARS := --variable "claude_setup_token=$(SETUP_TOKEN)" --variable "anthropic_api_key="
 
-push-templates: push-base-dev push-docker-dev ## Push all Coder templates
+TEMPLATE_DIRS := $(dir $(wildcard templates/*/main.tf))
+TEMPLATE_NAMES := $(filter-out modules examples,$(notdir $(patsubst %/,%,$(TEMPLATE_DIRS))))
 
-push-base-dev: ## Push base-dev template to Coder
-	rm -rf templates/base-dev/.terraform
-	tar -cvh -C templates/base-dev . | coder templates push base-dev -d - -y $(TEMPLATE_VARS)
+push-templates: $(addprefix push-,$(TEMPLATE_NAMES)) ## Push all active templates to Coder
 
-push-docker-dev: ## Push docker-dev template to Coder
-	rm -rf templates/docker-dev/.terraform
-	tar -cvh -C templates/docker-dev . | coder templates push docker-dev -d - -y $(TEMPLATE_VARS)
+push-%: ## Push a single template (e.g., make push-dev)
+	@rm -rf /tmp/coder-tpl-$*
+	@mkdir -p /tmp/coder-tpl-$*
+	@cp -r templates/$*/* /tmp/coder-tpl-$*/
+	@rm -rf /tmp/coder-tpl-$*/modules
+	@cp -r templates/modules /tmp/coder-tpl-$*/modules
+	@rm -rf /tmp/coder-tpl-$*/.terraform
+	tar -c -C /tmp/coder-tpl-$* . | coder templates push $* -d - -y $(TEMPLATE_VARS)
+	@rm -rf /tmp/coder-tpl-$*
+
+new-template: ## Create a new template from the reference example
+	@test -n "$(NAME)" || (echo "Usage: make new-template NAME=my-template" && exit 1)
+	@test ! -d "templates/$(NAME)" || (echo "templates/$(NAME) already exists" && exit 1)
+	cp -r templates/examples/base-dev templates/$(NAME)
+	rm -f templates/$(NAME)/modules
+	ln -s ../modules templates/$(NAME)/modules
+	@echo "Created templates/$(NAME) — edit main.tf, then run: make push-$(NAME)"
 
 # --- Provisioning ------------------------------------------------------------
 

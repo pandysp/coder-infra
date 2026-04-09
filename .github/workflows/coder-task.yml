@@ -71,5 +71,5 @@ jobs:
 
           coder task create \
             --name "${TASK_NAME}" \
-            --template base-dev \
+            --template ${{ vars.CODER_TASK_TEMPLATE || 'dev' }} \
             "$PROMPT"
