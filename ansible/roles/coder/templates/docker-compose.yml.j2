@@ -22,6 +22,10 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+{% if coder_domain | default('') | length == 0 %}
+      caddy:
+        condition: service_healthy
+{% endif %}
     environment:
       CODER_PG_CONNECTION_URL: "postgresql://coder:{{ coder_pg_password }}@postgres:5432/coder?sslmode=disable"
 {% if coder_domain | default('') | length > 0 %}
@@ -29,6 +33,10 @@ services:
       CODER_WILDCARD_ACCESS_URL: "*.{{ coder_domain }}"
 {% else %}
       CODER_ACCESS_URL: "https://{{ tailscale_fqdn }}"
+      # Adds Caddy's internal CA to Go's directory-based trust roots; system CAs
+      # still load from /etc/ssl/certs/ca-certificates.crt because Go loads files
+      # and directories independently.
+      SSL_CERT_DIR: /caddy-data/caddy/pki/authorities/local
 {% endif %}
       CODER_HTTP_ADDRESS: "0.0.0.0:7080"
       CODER_TELEMETRY_ENABLE: "false"
@@ -47,6 +55,9 @@ services:
       - "127.0.0.1:2112:2112"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+{% if coder_domain | default('') | length == 0 %}
+      - caddy_data:/caddy-data:ro
+{% endif %}
     group_add:
       - "{{ docker_gid }}"
 
@@ -59,8 +70,10 @@ services:
     image: {{ coder_caddy_image }}
 {% endif %}
     restart: unless-stopped
+{% if coder_domain | default('') | length > 0 %}
     depends_on:
       - coder
+{% endif %}
 {% if coder_domain | default('') | length > 0 %}
     environment:
       CLOUDFLARE_API_TOKEN: "{{ cloudflare_api_token }}"
@@ -70,9 +83,23 @@ services:
 {% if coder_domain | default('') | length > 0 %}
       - "0.0.0.0:443:443"
 {% endif %}
+{% if coder_domain | default('') | length == 0 %}
+    healthcheck:
+      test: ["CMD-SHELL", "chmod 755 /data/caddy/pki /data/caddy/pki/authorities /data/caddy/pki/authorities/local 2>/dev/null; chmod 644 /data/caddy/pki/authorities/local/*.crt 2>/dev/null; curl -sf --cacert /data/caddy/pki/authorities/local/root.crt https://{{ tailscale_fqdn }}/healthz >/dev/null; rc=$$?; [ $$rc -eq 0 ] || [ $$rc -eq 22 ]"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+{% endif %}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
+{% if coder_domain | default('') | length == 0 %}
+    networks:
+      default:
+        aliases:
+          - {{ tailscale_fqdn }}
+{% endif %}
 {% if coder_domain | default('') | length > 0 %}
     networks:
       default:

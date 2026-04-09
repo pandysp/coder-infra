@@ -5,6 +5,11 @@
         dns cloudflare {env.CLOUDFLARE_API_TOKEN}
     }
 }
+{% else %}
+{{ tailscale_fqdn }} {
+    reverse_proxy coder:7080
+    tls internal
+}
 {% endif %}
 
 :80 {
