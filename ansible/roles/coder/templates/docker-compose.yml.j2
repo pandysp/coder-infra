@@ -73,6 +73,12 @@ services:
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
+{% if coder_domain | default('') | length > 0 %}
+    networks:
+      default:
+        aliases:
+          - {{ coder_domain }}
+{% endif %}
 
 volumes:
   postgres_data:
