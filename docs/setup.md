@@ -246,6 +246,8 @@ Workspace containers run on the Docker bridge network and cannot reach the Tails
 
 1. **Caddy binds to `0.0.0.0:80`** so workspace containers can reach it via the Docker bridge gateway (`host.docker.internal`). When `coder_domain` is set, Caddy also binds `0.0.0.0:443` and handles TLS itself; otherwise Tailscale Serve terminates HTTPS on `443`. External access is blocked by the Hetzner cloud firewall (no inbound rules). Note: Docker port publishing bypasses UFW via iptables NAT rules, so the Hetzner firewall is the sole perimeter control for port 80/443.
 
+   When `coder_domain` is set, Caddy also gets a Docker network alias matching the domain name. This lets the Coder container resolve the access URL to Caddy's container IP directly (with valid TLS via SNI), which is required for the deployment health check — without it, DNS resolves to the Tailscale IP, which is unreachable from the Docker bridge network (EACS03). In Tailscale Serve mode (no custom domain), this health check is expected to fail since there is no way to route HTTPS traffic from the Docker network back to the Tailscale interface.
+
 2. **Init script URL rewriting**: The Coder agent init script references `CODER_ACCESS_URL` (Tailscale FQDN by default, custom domain when enabled). The template's `replace()` rewrites this to `http://host.docker.internal:80` so the agent can download and connect through Caddy.
 
 3. **Dual DNS**: Containers use `100.100.100.100` (Tailscale MagicDNS) for Tailscale name resolution and `1.1.1.1` (Cloudflare) for internet DNS.

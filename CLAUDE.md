@@ -120,7 +120,7 @@ alertmanager_webhook_url (optional) — Webhook URL for Alertmanager critical al
 16. Web preview app slug `"preview"` (magic slug) enables Tasks UI preview navbar
 17. GitHub external auth is server-side config (`CODER_EXTERNAL_AUTH_0_*` env vars) + template-side `data.coder_external_auth`
 18. `resources_monitoring` on `coder_agent` provides memory/disk threshold alerts without custom scripts
-19. Caddy TLS is conditional: default installs use Tailscale Serve on `443`; setting `coder_domain` switches to Caddy on `443` with Cloudflare DNS-01 and `CODER_WILDCARD_ACCESS_URL`
+19. Caddy TLS is conditional: default installs use Tailscale Serve on `443`; setting `coder_domain` switches to Caddy on `443` with Cloudflare DNS-01 and `CODER_WILDCARD_ACCESS_URL`. When `coder_domain` is set, Caddy gets a Docker network alias matching the domain so the Coder container can resolve the access URL to Caddy directly (required for the deployment health check; without it, DNS resolves to the Tailscale IP which is unreachable from Docker)
 20. Workspace templates use dynamic parameters (`form_type`, `order`, regex validation) instead of splitting simple UX differences into separate templates
 21. `data "coder_workspace_preset"` defines Quick Task, Full Development, and Autonomous Agent with all parameter values explicit
 22. `module "code_server"` adds a browser IDE app on a subdomain alongside Claude Code and Web Preview
