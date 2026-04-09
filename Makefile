@@ -42,7 +42,7 @@ new-template: ## Create a new template from the reference example
 	@test -n "$(NAME)" || (echo "Usage: make new-template NAME=my-template" && exit 1)
 	@test ! -d "templates/$(NAME)" || (echo "templates/$(NAME) already exists" && exit 1)
 	cp -r templates/examples/base-dev templates/$(NAME)
-	rm -f templates/$(NAME)/modules
+	rm -rf templates/$(NAME)/modules
 	ln -s ../modules templates/$(NAME)/modules
 	@echo "Created templates/$(NAME) — edit main.tf, then run: make push-$(NAME)"
 
