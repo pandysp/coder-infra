@@ -10,23 +10,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Connect to Tailscale
-        uses: tailscale/github-action@v3
+        uses: tailscale/github-action@v4
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:ci
           version: 1.96.4
           args: --stateful-filtering=false
-
-      - name: Wait for Tailscale connectivity
-        run: |
-          echo "Tailscale status:"
-          tailscale status
-          echo "Pinging coder-dev..."
-          tailscale ping -c 3 coder-dev || true
-          echo "Testing HTTPS connectivity..."
-          curl -sf --max-time 15 https://coder.spannagel.dev/api/v2/buildinfo || echo "Direct HTTPS failed, trying via Tailscale IP..."
-          curl -sf --max-time 15 --resolve coder.spannagel.dev:443:100.80.26.76 https://coder.spannagel.dev/api/v2/buildinfo || echo "Tailscale IP also failed"
+          ping: coder-dev
 
       - name: Install Coder CLI
         run: curl -fsSL https://coder.com/install.sh | sh -s -- --version 2.31.7
