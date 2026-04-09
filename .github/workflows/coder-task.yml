@@ -43,12 +43,13 @@ jobs:
           fi
 
           REPO_NAME="${REPO#*/}"
-          ISSUE_SLUG="$(printf '%s' "${ISSUE_TITLE}" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-//; s/-$//' | cut -c1-40)"
+          ISSUE_SLUG="$(printf '%s' "${ISSUE_TITLE}" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-//; s/-$//')"
           TASK_NAME="issue-${ISSUE_NUMBER}"
 
           if [ -n "${ISSUE_SLUG}" ]; then
             TASK_NAME="${TASK_NAME}-${ISSUE_SLUG}"
           fi
+          TASK_NAME="$(printf '%s' "${TASK_NAME}" | cut -c1-32 | sed 's/-$//')"
 
           PROMPT=$(cat <<EOF
           GitHub issue #${ISSUE_NUMBER}: ${ISSUE_TITLE}
