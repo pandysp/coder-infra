@@ -9,7 +9,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "127.0.0.1:5432:5432"
+      - "0.0.0.0:5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U coder -d coder"]
       interval: 5s
@@ -52,7 +52,7 @@ services:
       CODER_EXTERNAL_AUTH_0_CLIENT_SECRET: "{{ github_oauth_client_secret }}"
 {% endif %}
     ports:
-      - "127.0.0.1:2112:2112"
+      - "0.0.0.0:2112:2112"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
 {% if coder_domain | default('') | length == 0 %}

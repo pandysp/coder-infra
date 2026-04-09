@@ -61,7 +61,7 @@ services:
       - '--path.rootfs=/host'
       - '--collector.systemd'
       - '--collector.processes'
-      - '--web.listen-address=127.0.0.1:9100'
+      - '--web.listen-address=0.0.0.0:9100'
     pid: host
     network_mode: host
     volumes:

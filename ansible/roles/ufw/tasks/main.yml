@@ -26,6 +26,12 @@
     port: "22"
     proto: tcp
 
+- name: Allow Docker containers to reach host services
+  community.general.ufw:
+    rule: allow
+    from_ip: 172.16.0.0/12
+    comment: "Docker bridge networks"
+
 - name: Enable ufw
   community.general.ufw:
     state: enabled
