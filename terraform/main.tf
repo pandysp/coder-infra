@@ -27,6 +27,7 @@ resource "terraform_data" "provision" {
       GITHUB_OAUTH_CLIENT_SECRET = var.github_oauth_client_secret
       CODER_DOMAIN               = var.coder_domain
       CLOUDFLARE_API_TOKEN       = var.cloudflare_api_token
+      PROVISION_GRAFANA_ADMIN_USER     = var.grafana_admin_user
       PROVISION_GRAFANA_ADMIN_PASSWORD = var.grafana_admin_password
       PROVISION_ALERTMANAGER_WEBHOOK_URL = var.alertmanager_webhook_url
     }

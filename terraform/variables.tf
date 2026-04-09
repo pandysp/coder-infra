@@ -77,6 +77,12 @@ variable "force_reprovision" {
   default     = ""
 }
 
+variable "grafana_admin_user" {
+  description = "Admin username for Grafana"
+  type        = string
+  default     = "admin"
+}
+
 variable "grafana_admin_password" {
   description = "Admin password for Grafana"
   type        = string

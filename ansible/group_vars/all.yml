@@ -28,6 +28,7 @@ monitoring_enabled: true
 monitoring_dir: /opt/monitoring
 monitoring_prometheus_retention: "15d"
 monitoring_prometheus_retention_size: "5GB"
+monitoring_grafana_admin_user: "admin"
 monitoring_grafana_admin_password: ""
 monitoring_alertmanager_webhook_url: ""
 monitoring_loki_enabled: false
