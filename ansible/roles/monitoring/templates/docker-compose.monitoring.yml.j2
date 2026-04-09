@@ -31,7 +31,7 @@ services:
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
     environment:
       GF_SECURITY_ADMIN_PASSWORD: "{{ monitoring_grafana_admin_password }}"
-      GF_SERVER_ROOT_URL: "{{ monitoring_grafana_root_url | default('http://localhost:3000') }}"
+      GF_SERVER_ROOT_URL: "{{ monitoring_grafana_root_url | default('https://' + (monitoring_tailscale_fqdn | default('localhost')) + ':8443') }}"
       GF_AUTH_ANONYMOUS_ENABLED: "false"
     ports:
       - "127.0.0.1:3000:3000"

@@ -148,11 +148,11 @@ Services and memory limits (864MB total, 1.4GB with Loki):
 All ports bound to `127.0.0.1` — access via Tailscale SSH tunnel or Tailscale Serve.
 
 ### Accessing Grafana
-Via SSH tunnel: `ssh -L 3000:localhost:3000 root@<server-name>`
-Then open `http://localhost:3000` (admin / password set in `grafana_admin_password`).
+Grafana is exposed via Tailscale Serve on port 8443:
+`https://<server-name>.<tailnet>.ts.net:8443`
+(admin / password set in `grafana_admin_password`)
 
-Via Tailscale Serve (persistent): `tailscale serve --bg --https=3000 http://localhost:3000`
-Then access at `https://<server-name>:3000` from any tailnet device.
+Monitoring access is independent of Coder's Caddy proxy — if Coder is down, Grafana still works as long as Tailscale is up.
 
 ### Key Dashboards
 - **Coder Overview** (`coder-overview`) — API health, workspace builds, provisioner queue, agent connectivity

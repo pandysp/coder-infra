@@ -2,6 +2,15 @@
 - name: Deploy monitoring stack
   when: monitoring_enabled | default(false) | bool
   block:
+    - name: Get Tailscale FQDN for Grafana URL
+      ansible.builtin.command: tailscale status --json
+      register: monitoring_tailscale_status
+      changed_when: false
+
+    - name: Set Tailscale FQDN fact
+      ansible.builtin.set_fact:
+        monitoring_tailscale_fqdn: "{{ (monitoring_tailscale_status.stdout | from_json).Self.DNSName | regex_replace('\\.$', '') }}"
+
     - name: Read Coder PostgreSQL password from file
       ansible.builtin.slurp:
         src: "{{ coder_dir }}/.pg_password"
@@ -136,9 +145,19 @@
       delay: 5
       until: grafana_health.status == 200
 
+    - name: Configure Tailscale Serve for Grafana
+      ansible.builtin.command: tailscale serve --bg --https=8443 http://localhost:3000
+      register: ts_serve_grafana
+      changed_when: "'available' in ts_serve_grafana.stderr or 'started' in ts_serve_grafana.stderr"
+
 - name: Tear down monitoring stack
   when: not (monitoring_enabled | default(false) | bool)
   block:
+    - name: Remove Tailscale Serve for Grafana
+      ansible.builtin.command: tailscale serve --https=8443 off
+      changed_when: true
+      failed_when: false
+
     - name: Check if monitoring compose file exists
       ansible.builtin.stat:
         path: "{{ monitoring_dir }}/docker-compose.yml"
