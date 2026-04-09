@@ -2,6 +2,17 @@
 - name: Deploy monitoring stack
   when: monitoring_enabled | default(false) | bool
   block:
+    - name: Read Coder PostgreSQL password from file
+      ansible.builtin.slurp:
+        src: "{{ coder_dir }}/.pg_password"
+      register: monitoring_pg_password_content
+      when: coder_pg_password is not defined
+
+    - name: Set Coder PostgreSQL password fact
+      ansible.builtin.set_fact:
+        coder_pg_password: "{{ monitoring_pg_password_content.content | b64decode }}"
+      when: coder_pg_password is not defined
+
     - name: Create monitoring base directory
       ansible.builtin.file:
         path: "{{ monitoring_dir }}"

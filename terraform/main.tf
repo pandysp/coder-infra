@@ -25,9 +25,9 @@ resource "terraform_data" "provision" {
       ANTHROPIC_API_KEY          = var.anthropic_api_key
       GITHUB_OAUTH_CLIENT_ID     = var.github_oauth_client_id
       GITHUB_OAUTH_CLIENT_SECRET = var.github_oauth_client_secret
-      CODER_DOMAIN                      = var.coder_domain
-      CLOUDFLARE_API_TOKEN              = var.cloudflare_api_token
-      PROVISION_GRAFANA_ADMIN_PASSWORD  = var.grafana_admin_password
+      CODER_DOMAIN               = var.coder_domain
+      CLOUDFLARE_API_TOKEN       = var.cloudflare_api_token
+      PROVISION_GRAFANA_ADMIN_PASSWORD = var.grafana_admin_password
       PROVISION_ALERTMANAGER_WEBHOOK_URL = var.alertmanager_webhook_url
     }
   }
