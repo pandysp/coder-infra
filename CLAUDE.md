@@ -121,7 +121,7 @@ alertmanager_webhook_url (optional) — Webhook URL for Alertmanager critical al
 12. DNS: `["100.100.100.100", "1.1.1.1"]` — MagicDNS for Tailscale names, Cloudflare for internet
 13. Template uses `coder_script` resources instead of monolithic `startup_script` for per-step dashboard progress
 14. Claude-code module v4.9.1 handles auth via `coder_env` (not Docker container env vars); uses `claude_code_oauth_token`
-15. `coder_task` + `coder_ai_task` wire Claude Code into the Tasks UI for fire-and-forget background agents
+15. `coder_task` + `coder_ai_task` wire Claude Code into the Tasks UI for fire-and-forget background agents. Workspace names are limited to 32 characters
 16. Web preview app slug `"preview"` (magic slug) enables Tasks UI preview navbar
 17. GitHub external auth is server-side config (`CODER_EXTERNAL_AUTH_0_*` env vars) + template-side `data.coder_external_auth`
 18. `resources_monitoring` on `coder_agent` provides memory/disk threshold alerts without custom scripts

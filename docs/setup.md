@@ -229,16 +229,23 @@ Tasks auto-pause at workspace idle timeout and can be resumed later.
 
 A GitHub Action (`.github/workflows/coder-task.yml`) automates creating Coder Tasks from GitHub issues:
 
-1. Add repository secrets: `CODER_URL` and `CODER_SESSION_TOKEN`
-2. Label any GitHub issue with `coder`
-3. The action runs `coder task create --template base-dev` with the issue body and repository URL in the prompt
-4. Claude Code works autonomously and creates a PR
+1. Create a Tailscale OAuth client at [Tailscale Admin > Settings > Trust credentials](https://login.tailscale.com/admin/settings/trust-credentials):
+   - Type: OAuth
+   - Scopes: `auth_keys` (Read + Write) with tag `tag:ci`
+   - The `tag:ci` tag must exist in your ACL policy (see Access Controls in the admin console)
 
-Generate a session token with:
+2. Add repository secrets:
+   - `TS_OAUTH_CLIENT_ID` and `TS_OAUTH_SECRET` — from the OAuth client above
+   - `CODER_URL` — your Coder access URL (e.g., `https://coder.yourdomain.com`)
+   - `CODER_SESSION_TOKEN` — generate with `coder tokens create`
 
-```bash
-coder tokens create
-```
+3. If your Tailscale hostname differs from `coder-dev`, set the repo variable `TAILSCALE_PING_TARGET` to your server's Tailscale hostname
+
+4. Label any GitHub issue with `coder`
+
+5. The action connects to your tailnet, runs `coder task create` with the issue body, and Claude Code works autonomously
+
+> **Note:** Workspace names are limited to 32 characters. The workflow truncates the task name automatically.
 
 ## Workspace Networking
 
