@@ -50,3 +50,4 @@ RUN curl https://mise.run | sh \
 # ── PATH (explicit — works in non-interactive contexts) ──────────
 ENV PATH="/home/coder/.local/bin:/home/coder/.local/share/pnpm:$PATH"
 ENV MISE_PYTHON_COMPILE="0"
+ENV MISE_NODE_VERIFY="false"
