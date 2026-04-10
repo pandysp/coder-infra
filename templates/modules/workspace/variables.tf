@@ -1,3 +1,9 @@
+variable "workspace_image" {
+  type        = string
+  description = "Docker image for the workspace container"
+  default     = "codercom/enterprise-base@sha256:5abfb835c2421f89d5a30fe42bfa369de91222f3e13145172448d9fd173676de"
+}
+
 variable "enable_docker_in_docker" {
   type        = bool
   description = "Enable Docker-in-Docker via Sysbox runtime"

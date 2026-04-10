@@ -225,22 +225,33 @@ resource "coder_script" "system_setup" {
   script             = <<-EOT
     #!/bin/bash
     set -eo pipefail
-    if ! command -v rg &> /dev/null; then
-      sudo apt-get update -qq
-      sudo apt-get install -y -qq ripgrep fd-find tree
-    fi
-    if ! command -v gh &> /dev/null; then
-      sudo mkdir -p -m 755 /etc/apt/keyrings
-      curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null
-      sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
-      ARCH="$(dpkg --print-architecture)"
-      echo "deb [arch=$ARCH signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
-      sudo apt-get update -qq
-      sudo apt-get install -y -qq gh
-    fi
-    if ! command -v node &> /dev/null; then
-      curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-      sudo apt-get install -y -qq nodejs
+
+    # If mise is available (custom image), activate it and install runtimes
+    # from .tool-versions if present. Otherwise fall back to installing basics.
+    if command -v mise &> /dev/null; then
+      eval "$(mise activate bash)"
+      if [ -f ~/.tool-versions ]; then
+        mise install --yes
+      fi
+    else
+      # Fallback for enterprise-base (no custom image)
+      if ! command -v rg &> /dev/null; then
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq ripgrep fd-find tree
+      fi
+      if ! command -v gh &> /dev/null; then
+        sudo mkdir -p -m 755 /etc/apt/keyrings
+        curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null
+        sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+        ARCH="$(dpkg --print-architecture)"
+        echo "deb [arch=$ARCH signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq gh
+      fi
+      if ! command -v node &> /dev/null; then
+        curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+        sudo apt-get install -y -qq nodejs
+      fi
     fi
   EOT
 }
@@ -256,10 +267,12 @@ resource "coder_script" "docker_cli" {
   script             = <<-EOT
     #!/bin/bash
     set -eo pipefail
-    # Sysbox provides the runtime; install CLI + daemon inside the container
+
+    # Install Docker CLI if not present (enterprise-base without custom image)
     if ! command -v docker &> /dev/null; then
       curl -fsSL https://get.docker.com | sh
     fi
+
     # Start dockerd if not already running (no systemd in Sysbox containers)
     if ! docker info &>/dev/null; then
       sudo dockerd &>/tmp/dockerd.log &
@@ -331,7 +344,7 @@ module "claude_code" {
   dangerously_skip_permissions = data.coder_parameter.claude_permission.value == "bypassPermissions"
   cli_app                      = true
   disable_autoupdater          = true
-  system_prompt                = "You are running in a Coder workspace. Tools available: rg, fd, tree, node, npm, git. If a repo was cloned, it is in /home/coder/."
+  system_prompt                = "You are running in a Coder workspace. Tools available: rg, fd, tree, gh, jq, yq, make, git, mise (version manager). Use `mise install` to install runtimes from .tool-versions. If a repo was cloned, it is in /home/coder/."
   # Pre-seed ~/.claude.json so the bypass-permissions consent TUI is skipped.
   # The module's install.sh only writes this in standalone mode, not tasks mode.
   pre_install_script = <<-EOT
@@ -400,7 +413,7 @@ resource "docker_volume" "home" {
 
 resource "docker_container" "workspace" {
   count    = data.coder_workspace.me.start_count
-  image    = "codercom/enterprise-base@sha256:5abfb835c2421f89d5a30fe42bfa369de91222f3e13145172448d9fd173676de"
+  image    = var.workspace_image
   name     = "coder-${data.coder_workspace_owner.me.name}-${lower(data.coder_workspace.me.name)}"
   hostname = data.coder_workspace.me.name
   dns      = ["100.100.100.100", "1.1.1.1"]
