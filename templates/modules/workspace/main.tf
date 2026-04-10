@@ -230,28 +230,16 @@ resource "coder_script" "system_setup" {
     # from .tool-versions if present. Otherwise fall back to installing basics.
     if command -v mise &> /dev/null; then
       eval "$(mise activate bash)"
-      if [ -f ~/.tool-versions ]; then
+      if [ -f ~/.tool-versions ] || [ -f ~/.mise.toml ]; then
         mise install --yes
       fi
     else
       # Fallback for enterprise-base (no custom image)
-      if ! command -v rg &> /dev/null; then
-        sudo apt-get update -qq
-        sudo apt-get install -y -qq ripgrep fd-find tree
-      fi
-      if ! command -v gh &> /dev/null; then
-        sudo mkdir -p -m 755 /etc/apt/keyrings
-        curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null
-        sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
-        ARCH="$(dpkg --print-architecture)"
-        echo "deb [arch=$ARCH signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
-        sudo apt-get update -qq
-        sudo apt-get install -y -qq gh
-      fi
-      if ! command -v node &> /dev/null; then
-        curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-        sudo apt-get install -y -qq nodejs
-      fi
+      sudo apt-get update -qq
+      command -v rg   &> /dev/null || sudo apt-get install -y -qq ripgrep fd-find tree
+      command -v gh   &> /dev/null || sudo apt-get install -y -qq gh
+      command -v node &> /dev/null || (curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - && sudo apt-get install -y -qq nodejs)
+      sudo apt-get clean && sudo rm -rf /var/lib/apt/lists/*
     fi
   EOT
 }

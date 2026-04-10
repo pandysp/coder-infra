@@ -29,14 +29,15 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     && sudo ln -sf "$(which fdfind)" /usr/local/bin/fd \
     && sudo apt-get clean && sudo rm -rf /var/lib/apt/lists/*
 
-# ── Layer 3b: git-lfs (separate — post-install fails under QEMU) ─
+# ── Layer 3b: git-lfs (separate — post-install script fails under QEMU)
 RUN sudo apt-get update -qq \
     && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends git-lfs \
-    || (sudo dpkg --configure -a; true) \
+    || (sudo dpkg --configure -a && sudo apt-get install -y -qq git-lfs) \
     && sudo apt-get clean && sudo rm -rf /var/lib/apt/lists/*
 
-# ── Layer 4: yq (not in Ubuntu repos) ────────────────────────────
-RUN sudo curl -fsSL "https://github.com/mikefarah/yq/releases/latest/download/yq_linux_$(dpkg --print-architecture)" \
+# ── Layer 4: yq (pinned version — not in Ubuntu repos) ───────────
+ARG YQ_VERSION=v4.52.5
+RUN sudo curl -fsSL "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_$(dpkg --print-architecture)" \
       -o /usr/local/bin/yq \
     && sudo chmod +x /usr/local/bin/yq
 

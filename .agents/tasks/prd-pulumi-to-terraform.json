@@ -1,0 +1,272 @@
+{
+  "version": 1,
+  "project": "Pulumi to Terraform Migration",
+  "overview": "Replace the Pulumi TypeScript infrastructure layer with Terraform HCL so the entire repo uses one language. The new terraform/ directory provisions the same Hetzner CX33 server with Tailscale zero-trust networking and triggers Ansible via local-exec, matching all current Pulumi behavior while incorporating review feedback: state security warnings, force_reprovision variable, --force-reauth in cloud-init, destroy-time Tailscale cleanup, and .gitignore updates.",
+  "goals": [
+    "Single language (HCL) across the entire repo — infrastructure + workspace templates",
+    "Feature parity with current Pulumi provisioning: TLS key, firewall, server, cloud-init, Ansible trigger",
+    "Local state backend as default, with TF Cloud and Hetzner Object Storage documented as upgrades",
+    "Incorporate all accepted review feedback (state security, force_reprovision, --force-reauth, destroy-time cleanup, .gitignore)",
+    "Atomic swap — pulumi/ deleted and terraform/ created in a single commit"
+  ],
+  "nonGoals": [
+    "No Pulumi-to-Terraform state import — this is a clean cutover, documented as such",
+    "No S3/remote backend implementation — local state is the default, remote is documented only",
+    "No changes to Ansible roles, playbook, or provision.sh (except --force-reauth in cloud-init template)",
+    "No changes to Coder workspace templates (templates/base-dev, templates/docker-dev)",
+    "No SSH key name collision handling — single-server reference repo"
+  ],
+  "successMetrics": [
+    "cd terraform && tofu init -backend=false && tofu validate passes",
+    "cd ansible && ansible-playbook playbook.yml --syntax-check passes",
+    "cd templates/base-dev && tofu init -backend=false && tofu validate passes",
+    "cd templates/docker-dev && tofu init -backend=false && tofu validate passes",
+    "Jinja2 templates (docker-compose, Caddyfile, daemon.json) render valid output",
+    "No Pulumi files remain in the repo",
+    "All config keys from Pulumi are present as Terraform variables with same defaults"
+  ],
+  "openQuestions": [],
+  "stack": {
+    "framework": "Terraform/OpenTofu HCL",
+    "hosting": "Hetzner Cloud",
+    "database": "N/A",
+    "auth": "Tailscale zero-trust networking"
+  },
+  "routes": [],
+  "uiNotes": [],
+  "dataModel": [
+    {
+      "entity": "Terraform Resources",
+      "fields": [
+        "tls_private_key.deploy (ED25519)",
+        "hcloud_firewall.default (no inbound, all outbound)",
+        "hcloud_ssh_key.deploy",
+        "hcloud_server.coder (CX33, Ubuntu 24.04, cloud-init)",
+        "terraform_data.provision (local-exec -> provision.sh)"
+      ]
+    }
+  ],
+  "importFormat": {
+    "description": "Not applicable",
+    "example": {}
+  },
+  "rules": [
+    "Local state is the default backend — no remote backend configured",
+    "terraform.tfstate contains secrets in plain text — must be documented prominently",
+    ".terraform.lock.hcl is committed to version control; terraform.tfstate is gitignored",
+    "All sensitive variables marked sensitive = true (suppresses CLI output but does not encrypt state)",
+    "provision.sh is unchanged — Terraform passes the same env vars as Pulumi did",
+    "Cloud-init uses --force-reauth for Tailscale to handle server replacement gracefully",
+    "Destroy-time provisioner attempts tailscale logout via SSH, fails gracefully if SSH is unavailable",
+    "force_reprovision variable allows re-running Ansible without server replacement"
+  ],
+  "qualityGates": [
+    "cd terraform && tofu init -backend=false && tofu validate",
+    "cd ansible && ansible-playbook playbook.yml --syntax-check -i inventory/hosts.ini.example",
+    "cd templates/base-dev && tofu init -backend=false && tofu validate",
+    "cd templates/docker-dev && tofu init -backend=false && tofu validate"
+  ],
+  "stories": [
+    {
+      "id": "US-001",
+      "title": "Create terraform/ directory with versions.tf and variables.tf",
+      "status": "open",
+      "dependsOn": [],
+      "description": "As a developer, I want the Terraform project scaffold with provider requirements and all input variables so subsequent stories can build on it.",
+      "acceptanceCriteria": [
+        "terraform/versions.tf exists with required_version >= 1.9",
+        "terraform/versions.tf declares providers: hcloud, tls, null (for terraform_data is built-in, no provider needed)",
+        "terraform/variables.tf declares all variables matching Pulumi config keys: server_name (default: coder-dev), server_type (default: cx33), server_location (default: fsn1), tailscale_auth_key (sensitive), coder_admin_email, claude_setup_token (sensitive), anthropic_api_key (sensitive), github_token (sensitive, default: empty string), force_reprovision (default: empty string)",
+        "All sensitive variables have sensitive = true",
+        "force_reprovision variable has description explaining its purpose for secret rotation",
+        "Example: tofu validate succeeds with just these two files (no resources yet)",
+        "Negative case: removing required_version causes validation to still work (it's a constraint, not a resource)"
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "Create firewall.tf with no-inbound Hetzner firewall",
+      "status": "open",
+      "dependsOn": ["US-001"],
+      "description": "As a developer, I want the Hetzner firewall resource that blocks all inbound traffic and allows all outbound, matching the current Pulumi firewall.",
+      "acceptanceCriteria": [
+        "terraform/firewall.tf creates hcloud_firewall named 'coder-no-inbound'",
+        "Three outbound rules: TCP 1-65535, UDP 1-65535, ICMP — all to 0.0.0.0/0 and ::/0",
+        "No inbound rules defined",
+        "Each rule has a description field matching current Pulumi descriptions",
+        "Example: tofu validate passes with firewall.tf included",
+        "Negative case: no inbound rules means no direction = 'in' blocks exist in the file"
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "Create user-data.sh.tftpl cloud-init template",
+      "status": "open",
+      "dependsOn": ["US-001"],
+      "description": "As a developer, I want the cloud-init template that bootstraps Tailscale on the server, matching current Pulumi user-data.ts behavior with the addition of --force-reauth.",
+      "acceptanceCriteria": [
+        "terraform/user-data.sh.tftpl is a templatefile()-compatible shell script",
+        "Template accepts two variables: tailscale_auth_key, hostname",
+        "Creates ubuntu user with sudo if not exists (matching current behavior)",
+        "Installs Tailscale via curl | sh",
+        "Writes auth key to /tmp/ts-authkey with mode 600, uses file: prefix",
+        "tailscale up uses --authkey, --hostname, --ssh, AND --force-reauth flags",
+        "Removes auth key file after tailscale up",
+        "Logs to /var/log/cloud-init-coder.log via tee (matching provision.sh shred target)",
+        "Shell variables use $${} escaping where needed to avoid HCL interpolation conflicts",
+        "Example: templatefile() renders with test values and produces valid bash",
+        "Negative case: no unescaped ${} that would be interpreted as HCL interpolation"
+      ]
+    },
+    {
+      "id": "US-004",
+      "title": "Create server.tf with Hetzner server and SSH key",
+      "status": "open",
+      "dependsOn": ["US-001", "US-002", "US-003"],
+      "description": "As a developer, I want the Hetzner server resource with SSH key, cloud-init user-data, and firewall attachment, matching current Pulumi server.ts behavior.",
+      "acceptanceCriteria": [
+        "terraform/server.tf creates tls_private_key.deploy with algorithm ED25519",
+        "terraform/server.tf creates hcloud_ssh_key.deploy with name '${var.server_name}-deploy'",
+        "terraform/server.tf creates hcloud_server.coder with: name from var, server_type from var, location from var, image ubuntu-24.04, user_data via templatefile(), firewall_ids referencing hcloud_firewall.default, ssh_keys referencing hcloud_ssh_key.deploy",
+        "Example: tofu validate passes with all files so far",
+        "Negative case: no hardcoded values — server_type, location, name all come from variables"
+      ]
+    },
+    {
+      "id": "US-005",
+      "title": "Create main.tf with Ansible provisioner and destroy-time Tailscale cleanup",
+      "status": "open",
+      "dependsOn": ["US-004"],
+      "description": "As a developer, I want the terraform_data resource that triggers provision.sh with secrets as env vars, re-triggers on server replacement or force_reprovision change, and cleans up Tailscale on destroy.",
+      "acceptanceCriteria": [
+        "terraform/main.tf creates terraform_data.provision resource",
+        "triggers_replace includes both hcloud_server.coder.id and var.force_reprovision",
+        "provisioner local-exec runs bash ${path.module}/../scripts/provision.sh",
+        "environment block passes all secrets matching current Pulumi env vars: SERVER_NAME, SSH_PRIVATE_KEY, CODER_ADMIN_EMAIL, CLAUDE_SETUP_TOKEN, ANTHROPIC_API_KEY, GITHUB_TOKEN",
+        "A destroy-time provisioner (when = destroy) attempts SSH to the server and runs 'tailscale logout', with || true so it fails gracefully if SSH is unavailable",
+        "The destroy-time provisioner uses the server name from var.server_name for the SSH target",
+        "Example: tofu validate passes with all files",
+        "Negative case: destroy-time provisioner has || true — it must not block terraform destroy if SSH fails"
+      ]
+    },
+    {
+      "id": "US-006",
+      "title": "Create outputs.tf and terraform.tfvars.example",
+      "status": "open",
+      "dependsOn": ["US-005"],
+      "description": "As a developer, I want outputs matching current Pulumi exports and an example tfvars file with state security warnings, so users know how to configure and what risks exist.",
+      "acceptanceCriteria": [
+        "terraform/outputs.tf exports: server_ipv4 (hcloud_server.coder.ipv4_address), hostname (var.server_name), deploy_public_key (tls_private_key.deploy.public_key_openssh, sensitive), provision_status (terraform_data.provision.id)",
+        "deploy_public_key output is marked sensitive = true",
+        "terraform/terraform.tfvars.example contains all variable keys with placeholder values",
+        "terraform.tfvars.example has a prominent comment block at the top warning about state file security: plain text secrets, recommend chmod 600, document Hetzner Object Storage and TF Cloud as encryption options",
+        "terraform.tfvars.example documents force_reprovision usage for secret rotation",
+        "Example: all quality gates pass with the complete terraform/ directory",
+        "Negative case: terraform.tfvars.example must NOT contain real secrets — only placeholders like <your-hetzner-api-token>"
+      ]
+    },
+    {
+      "id": "US-007",
+      "title": "Update .gitignore for terraform/ directory",
+      "status": "open",
+      "dependsOn": ["US-006"],
+      "description": "As a developer, I want .gitignore to exclude Terraform state files and tfvars from the new terraform/ directory while committing .terraform.lock.hcl, and remove Pulumi-specific entries.",
+      "acceptanceCriteria": [
+        "Remove Pulumi section from .gitignore (pulumi/node_modules/, pulumi/bin/, pulumi/Pulumi.*.yaml entries)",
+        "Add terraform/ section: terraform/.terraform/, terraform/terraform.tfstate, terraform/terraform.tfstate.backup, terraform/terraform.tfvars, terraform/*.auto.tfvars",
+        "Do NOT gitignore terraform/.terraform.lock.hcl (it should be committed)",
+        "Existing templates/**/ patterns remain unchanged",
+        "Example: git status after creating terraform/ shows .terraform.lock.hcl as trackable but terraform.tfstate is ignored",
+        "Negative case: terraform.tfvars must be gitignored (contains real secrets) but terraform.tfvars.example must NOT be gitignored"
+      ]
+    },
+    {
+      "id": "US-008",
+      "title": "Delete pulumi/ directory",
+      "status": "open",
+      "dependsOn": ["US-007"],
+      "description": "As a developer, I want the Pulumi directory completely removed since it has been replaced by Terraform.",
+      "acceptanceCriteria": [
+        "pulumi/ directory is deleted entirely: index.ts, server.ts, firewall.ts, user-data.ts, package.json, tsconfig.json, Pulumi.yaml, Pulumi.prod.yaml.template",
+        "pulumi/node_modules/ is deleted if it exists",
+        "No references to Pulumi remain in the codebase except in CLAUDE.md and README.md migration notes",
+        "Example: find . -path ./node_modules -prune -o -name '*.ts' -print returns no Pulumi TypeScript files",
+        "Negative case: templates/base-dev/main.tf and templates/docker-dev/main.tf are NOT deleted — those are Coder workspace templates, not Pulumi"
+      ]
+    },
+    {
+      "id": "US-009",
+      "title": "Update CLAUDE.md for Terraform",
+      "status": "open",
+      "dependsOn": ["US-008"],
+      "description": "As a developer, I want CLAUDE.md to reflect the new Terraform-based stack so future Claude sessions have accurate context.",
+      "acceptanceCriteria": [
+        "Stack section: replace 'Pulumi (TypeScript)' with 'Terraform/OpenTofu (HCL)' for infrastructure provisioning",
+        "Reference section: remove openclaw-infra Pulumi file references (pulumi/index.ts, server.ts, firewall.ts, user-data.ts), keep Ansible and scripts references",
+        "Repo Structure: replace pulumi/ tree with terraform/ tree showing versions.tf, variables.tf, main.tf, server.tf, firewall.tf, outputs.tf, user-data.sh.tftpl, terraform.tfvars.example",
+        "Config Keys section: update to show terraform variable names (same names, different format — terraform.tfvars instead of pulumi config set)",
+        "Key Patterns section: update pattern 3 from 'Pulumi command.local.Command' to 'terraform_data with local-exec provisioner'",
+        "Key Patterns: update pattern 7 from 'Pulumi Cloud for state management' to 'Local state (terraform.tfstate) with optional remote backend'",
+        "Add new pattern: 'force_reprovision variable for secret rotation without server replacement'",
+        "Coding Style: replace 'TypeScript: strict mode, explicit types' with 'Terraform: HCL with consistent formatting, one resource per logical file'",
+        "Example: CLAUDE.md accurately describes current repo state",
+        "Negative case: no references to Pulumi remain in CLAUDE.md except optionally in a migration note"
+      ]
+    },
+    {
+      "id": "US-010",
+      "title": "Update README.md for Terraform",
+      "status": "open",
+      "dependsOn": ["US-008"],
+      "description": "As a developer, I want README.md to reflect the Terraform workflow so users can follow the Quick Start with the new tool.",
+      "acceptanceCriteria": [
+        "Stack table: replace 'Pulumi (TypeScript)' with 'Terraform/OpenTofu (HCL)'",
+        "Quick Start section: replace pulumi commands with terraform equivalents: cd terraform, cp terraform.tfvars.example terraform.tfvars, edit terraform.tfvars, terraform init, terraform apply",
+        "Quick Start: remove 'cd pulumi && npm install' step",
+        "Quick Start: keep the ansible-galaxy collection install step",
+        "Add a 'State Security' section warning that terraform.tfstate contains secrets in plain text, recommending chmod 600, and documenting Hetzner Object Storage backend and TF Cloud free tier as encryption options",
+        "Add a 'Migration from Pulumi' note: if you deployed with Pulumi previously, run pulumi destroy first, then terraform apply (clean cutover, not import)",
+        "Add mention of force_reprovision for secret rotation in a 'Maintenance' or 'Operations' section",
+        "Example: a new user can follow Quick Start from clone to deploy",
+        "Negative case: no broken pulumi commands remain in README"
+      ]
+    },
+    {
+      "id": "US-011",
+      "title": "Update docs/setup.md for Terraform",
+      "status": "open",
+      "dependsOn": ["US-008"],
+      "description": "As a developer, I want the detailed setup guide updated to use Terraform commands instead of Pulumi.",
+      "acceptanceCriteria": [
+        "Section 1 (Clone and Configure): replace cd pulumi && npm install with cd terraform, replace pulumi stack init with cp terraform.tfvars.example terraform.tfvars",
+        "Replace all pulumi config set commands with terraform.tfvars editing instructions",
+        "Section 3 (Deploy): replace pulumi up with terraform init && terraform apply",
+        "Section on what deployment does: remove 'Pulumi Cloud' reference, update to describe local state",
+        "Destroy section: replace pulumi destroy with terraform destroy",
+        "Add note about force_reprovision for re-running Ansible after secret rotation",
+        "Add state security note consistent with README",
+        "Example: following setup.md from scratch reaches a working deployment",
+        "Negative case: no pulumi commands remain in setup.md"
+      ]
+    },
+    {
+      "id": "US-012",
+      "title": "Run all quality gates and verify clean state",
+      "status": "open",
+      "dependsOn": ["US-001", "US-002", "US-003", "US-004", "US-005", "US-006", "US-007", "US-008", "US-009", "US-010", "US-011"],
+      "description": "As a developer, I want all quality gates to pass and the repo to be in a clean, consistent state after the migration.",
+      "acceptanceCriteria": [
+        "cd terraform && tofu init -backend=false && tofu validate passes",
+        "cd ansible && ansible-playbook playbook.yml --syntax-check -i inventory/hosts.ini.example passes",
+        "cd templates/base-dev && tofu init -backend=false && tofu validate passes",
+        "cd templates/docker-dev && tofu init -backend=false && tofu validate passes",
+        "Jinja2 template rendering test passes (docker-compose.yml.j2, Caddyfile.j2, daemon.json.j2)",
+        "git status shows no untracked pulumi files",
+        "grep -r 'pulumi' in code files returns no hits (docs may mention it in migration context only)",
+        "All changes committed and pushed",
+        "Example: fresh clone, cd terraform && tofu init -backend=false && tofu validate succeeds",
+        "Negative case: no .terraform/ directories or terraform.tfstate files are committed"
+      ]
+    }
+  ]
+}
