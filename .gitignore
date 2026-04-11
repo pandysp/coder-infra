@@ -33,3 +33,4 @@ Thumbs.db
 templates/*/
 !templates/modules/
 !templates/examples/
+.envrc
