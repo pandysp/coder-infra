@@ -338,3 +338,50 @@ This removes the Hetzner server and attempts to log the device out of Tailscale.
 **Sysbox containers failing**: Ensure the kernel supports user namespaces: `ssh root@coder-dev "sysctl kernel.unprivileged_userns_clone"`. Ubuntu 24.04 enables this by default.
 
 **Re-provisioning fails**: If Ansible fails mid-run, `tofu apply` will re-run the full playbook. The playbook is idempotent — safe to re-run.
+
+### Tailscale Recovery
+
+If `provision.sh` fails with "did not appear on tailnet," the server's Tailscale node may have deauthenticated. This can happen if the server was offline for an extended period or if the auth key was revoked in the Tailscale admin panel.
+
+**Symptoms:** `tailscale ping <server-name>` returns "no such host." The server is running (responds to ICMP on its public IP) but not visible on the tailnet.
+
+**Recovery via Hetzner rescue mode:**
+
+```bash
+# 1. Get the server ID
+SERVER_ID=$(hcloud server list -o noheader -o columns=id,name | grep coder-dev | awk '{print $1}')
+
+# 2. Enable rescue mode (note the root password in the output)
+hcloud server enable-rescue $SERVER_ID
+
+# 3. Reboot into rescue
+hcloud server reset $SERVER_ID
+
+# 4. Add a temporary SSH firewall rule for your IP
+MY_IP=$(curl -sf https://api.ipify.org)
+FIREWALL_ID=$(hcloud firewall list -o noheader -o columns=id,name | grep coder | awk '{print $1}')
+# Add inbound TCP 22 from $MY_IP/32 in the Hetzner Cloud Console
+# (or via hcloud CLI / API)
+
+# 5. SSH into rescue mode (use the password from step 2)
+ssh root@<PUBLIC_IP>
+
+# 6. Mount the root filesystem and re-authenticate Tailscale
+mount /dev/sda1 /mnt
+chroot /mnt
+tailscale up --authkey=<YOUR_TAILSCALE_AUTH_KEY> --ssh --hostname=coder-dev --reset
+exit
+umount /mnt
+
+# 7. Boot back to normal
+hcloud server disable-rescue $SERVER_ID
+hcloud server reset $SERVER_ID
+
+# 8. Remove the temporary SSH firewall rule
+
+# 9. Verify and re-provision
+tailscale ping coder-dev
+tofu apply
+```
+
+**Prevention:** Use a reusable, non-ephemeral Tailscale auth key. Ephemeral keys cause the node to be removed from the tailnet when it goes offline.

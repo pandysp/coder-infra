@@ -87,19 +87,46 @@ fi
 # Once connected, we can SSH via the Tailscale hostname.
 echo "Waiting for ${SERVER_NAME} to appear on tailnet..."
 LAST_PING=""
-for i in $(seq 1 60); do
+TAILSCALE_OK=false
+for i in $(seq 1 18); do
     LAST_PING=$(tailscale ping -c 3 "${SERVER_NAME}" 2>&1 || true)
     if echo "${LAST_PING}" | grep -q "pong"; then
         echo "Device is reachable via Tailscale."
+        TAILSCALE_OK=true
         break
     fi
-    if [ "$i" -eq 60 ]; then
-        echo "ERROR: ${SERVER_NAME} did not appear on tailnet within 10 minutes" >&2
-        echo "Last ping output: ${LAST_PING}" >&2
-        exit 1
-    fi
+    echo "  attempt ${i}/18 — not yet reachable..."
     sleep 10
 done
+
+if [ "${TAILSCALE_OK}" != "true" ]; then
+    echo "" >&2
+    echo "ERROR: ${SERVER_NAME} did not appear on tailnet within 3 minutes." >&2
+    echo "" >&2
+    echo "Likely causes:" >&2
+    echo "  1. New server: cloud-init hasn't finished installing Tailscale yet." >&2
+    echo "     → Wait a few more minutes and re-run." >&2
+    echo "  2. Existing server: Tailscale deauthenticated (node key expired or revoked)." >&2
+    echo "     → Recovery: enable Hetzner rescue mode, SSH to the public IP," >&2
+    echo "       mount the disk, and re-authenticate Tailscale." >&2
+    echo "" >&2
+    echo "Recovery steps for Tailscale deauth:" >&2
+    echo "  SERVER_ID=\$(hcloud server list -o noheader -o columns=id,name | grep ${SERVER_NAME} | awk '{print \$1}')" >&2
+    echo "  hcloud server enable-rescue \$SERVER_ID         # note the root password" >&2
+    echo "  hcloud server reset \$SERVER_ID                 # boots into rescue" >&2
+    echo "  # Add temp SSH firewall rule for your IP in Hetzner Cloud Console" >&2
+    echo "  ssh root@<PUBLIC_IP>                            # use rescue password" >&2
+    echo "  mount /dev/sda1 /mnt && chroot /mnt" >&2
+    echo "  tailscale up --authkey=<YOUR_TS_AUTH_KEY> --ssh --hostname=${SERVER_NAME} --reset" >&2
+    echo "  exit && umount /mnt" >&2
+    echo "  hcloud server disable-rescue \$SERVER_ID" >&2
+    echo "  hcloud server reset \$SERVER_ID                 # boots normally" >&2
+    echo "  # Remove the temp SSH firewall rule" >&2
+    echo "  # Then re-run this provisioning script" >&2
+    echo "" >&2
+    echo "Last ping output: ${LAST_PING}" >&2
+    exit 1
+fi
 
 # Wait for cloud-init to complete
 echo "Waiting for cloud-init to finish..."
