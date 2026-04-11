@@ -29,11 +29,7 @@ trap 'rm -f "${SSH_KEY_FILE}" "${INVENTORY_FILE}" "${VARS_FILE}"' EXIT
 echo "${SSH_PRIVATE_KEY}" > "${SSH_KEY_FILE}"
 chmod 600 "${SSH_KEY_FILE}"
 
-# Create temporary inventory
-cat > "${INVENTORY_FILE}" <<EOF
-[coder]
-${SERVER_NAME} ansible_user=root ansible_ssh_private_key_file=${SSH_KEY_FILE} ansible_ssh_common_args='-o StrictHostKeyChecking=no'
-EOF
+# Inventory is created after Tailscale discovery (uses resolved IP)
 
 # Write secrets to temp vars file as JSON (avoids YAML special-character issues
 # with colons, quotes, backslashes in secret values). Ansible handles JSON natively.
@@ -93,6 +89,9 @@ for i in $(seq 1 18); do
     if echo "${LAST_PING}" | grep -q "pong"; then
         echo "Device is reachable via Tailscale."
         TAILSCALE_OK=true
+        # Extract the Tailscale IP from the ping response for SSH (short hostnames
+        # don't resolve via system DNS on all platforms; the IP always works)
+        TAILSCALE_IP=$(echo "${LAST_PING}" | grep -oE '([0-9]+\.){3}[0-9]+' | head -1)
         break
     fi
     echo "  attempt ${i}/18 — not yet reachable..."
@@ -128,10 +127,19 @@ if [ "${TAILSCALE_OK}" != "true" ]; then
     exit 1
 fi
 
+# Create inventory using the resolved Tailscale IP (not hostname — short hostnames
+# don't resolve via system DNS on all platforms)
+SSH_TARGET="${TAILSCALE_IP:-${SERVER_NAME}}"
+echo "SSH target: ${SSH_TARGET}"
+cat > "${INVENTORY_FILE}" <<EOF
+[coder]
+${SSH_TARGET} ansible_user=root ansible_ssh_private_key_file=${SSH_KEY_FILE} ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+EOF
+
 # Wait for cloud-init to complete
 echo "Waiting for cloud-init to finish..."
 if ! CI_OUTPUT=$(ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 \
-    -i "${SSH_KEY_FILE}" root@"${SERVER_NAME}" \
+    -i "${SSH_KEY_FILE}" root@"${SSH_TARGET}" \
     "cloud-init status --wait" 2>&1); then
     echo "ERROR: SSH failed while waiting for cloud-init:" >&2
     echo "${CI_OUTPUT}" >&2
@@ -155,7 +163,7 @@ ansible-playbook playbook.yml \
 # Shred cloud-init artifacts that contain the Tailscale auth key.
 # The user-data script self-cleans, but belt-and-suspenders: also clean from here
 # in case self-cleanup didn't run (e.g., cloud-init failure before that step).
-ssh -o StrictHostKeyChecking=no -i "${SSH_KEY_FILE}" root@"${SERVER_NAME}" \
+ssh -o StrictHostKeyChecking=no -i "${SSH_KEY_FILE}" root@"${SSH_TARGET}" \
     "shred -u /var/log/cloud-init-coder.log /var/log/cloud-init-output.log \
             /var/lib/cloud/instance/user-data.txt \
             /var/lib/cloud/instance/user-data.txt.i \
@@ -163,7 +171,7 @@ ssh -o StrictHostKeyChecking=no -i "${SSH_KEY_FILE}" root@"${SERVER_NAME}" \
      find /var/lib/cloud/instance/scripts/ -type f -exec shred -u {} \; 2>/dev/null || true"
 
 echo "Provisioning complete."
-TAILSCALE_FQDN=$(ssh -o StrictHostKeyChecking=no -i "${SSH_KEY_FILE}" root@"${SERVER_NAME}" \
+TAILSCALE_FQDN=$(ssh -o StrictHostKeyChecking=no -i "${SSH_KEY_FILE}" root@"${SSH_TARGET}" \
     "tailscale status --json | jq -r '.Self.DNSName' | sed 's/\\.$//'" 2>/dev/null) || true
 if [ -n "${CODER_DOMAIN}" ]; then
     echo "Coder is available at: https://${CODER_DOMAIN}"
