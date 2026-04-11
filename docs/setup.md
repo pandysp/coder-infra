@@ -369,7 +369,7 @@ ssh root@<PUBLIC_IP>
 # 6. Mount the root filesystem and re-authenticate Tailscale
 mount /dev/sda1 /mnt
 chroot /mnt
-tailscale up --authkey=<YOUR_TAILSCALE_AUTH_KEY> --ssh --hostname=coder-dev --reset
+tailscale up --authkey=<YOUR_TAILSCALE_AUTH_KEY> --ssh --hostname=coder-dev
 exit
 umount /mnt
 

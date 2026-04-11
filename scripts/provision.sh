@@ -116,7 +116,7 @@ if [ "${TAILSCALE_OK}" != "true" ]; then
     echo "  # Add temp SSH firewall rule for your IP in Hetzner Cloud Console" >&2
     echo "  ssh root@<PUBLIC_IP>                            # use rescue password" >&2
     echo "  mount /dev/sda1 /mnt && chroot /mnt" >&2
-    echo "  tailscale up --authkey=<YOUR_TS_AUTH_KEY> --ssh --hostname=${SERVER_NAME} --reset" >&2
+    echo "  tailscale up --authkey=<YOUR_TS_AUTH_KEY> --ssh --hostname=${SERVER_NAME}" >&2
     echo "  exit && umount /mnt" >&2
     echo "  hcloud server disable-rescue \$SERVER_ID" >&2
     echo "  hcloud server reset \$SERVER_ID                 # boots normally" >&2
