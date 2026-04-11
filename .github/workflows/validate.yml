@@ -21,6 +21,9 @@ jobs:
       - name: Validate infrastructure
         run: cd terraform && tofu init -backend=false && tofu validate
 
+      - name: Validate backend example
+        run: cd terraform && cp backend.tf.example backend.tf && tofu init -backend=false && tofu validate && rm backend.tf
+
       - name: Validate reference template
         run: cd templates/examples/base-dev && tofu init -backend=false && tofu validate
 

@@ -4,7 +4,6 @@ terraform/terraform.tfstate
 terraform/terraform.tfstate.backup
 terraform/terraform.tfvars
 terraform/*.auto.tfvars
-terraform/backend.hcl
 terraform/backend.tf
 
 # Terraform (workspace templates)
