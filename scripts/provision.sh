@@ -89,9 +89,9 @@ for i in $(seq 1 18); do
     if echo "${LAST_PING}" | grep -q "pong"; then
         echo "Device is reachable via Tailscale."
         TAILSCALE_OK=true
-        # Extract the Tailscale IP from the ping response for SSH (short hostnames
-        # don't resolve via system DNS on all platforms; the IP always works)
-        TAILSCALE_IP=$(echo "${LAST_PING}" | grep -oE '([0-9]+\.){3}[0-9]+' | head -1)
+        # Extract the Tailscale IP from parentheses in ping response, e.g. "(100.x.y.z)"
+        # Avoids matching the gateway IP after "via"
+        TAILSCALE_IP=$(echo "${LAST_PING}" | grep -oE '\(([0-9]+\.){3}[0-9]+\)' | tr -d '()' | head -1)
         break
     fi
     echo "  attempt ${i}/18 — not yet reachable..."
