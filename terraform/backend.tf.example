@@ -1,0 +1,27 @@
+# Remote state backend (S3-compatible)
+#
+# Copy this file to backend.tf, fill in your values, then run:
+#   make init
+#
+# Without backend.tf, state is stored locally (fine for getting started).
+#
+# Credentials via environment variables or .envrc:
+#   export AWS_ACCESS_KEY_ID="your-access-key"
+#   export AWS_SECRET_ACCESS_KEY="your-secret-key"
+#
+# Works with: Cloudflare R2, AWS S3, Hetzner Object Storage, MinIO, Backblaze B2
+
+terraform {
+  backend "s3" {
+    bucket = "your-state-bucket"
+    key    = "coder-infra/terraform.tfstate"
+
+    # S3-compatible endpoint (not needed for AWS S3)
+    endpoints                   = { s3 = "https://YOUR_ACCOUNT_ID.r2.cloudflarestorage.com" }
+    region                      = "us-east-1"
+    skip_credentials_validation = true
+    skip_metadata_api_check     = true
+    skip_requesting_account_id  = true
+    skip_s3_checksum            = true
+  }
+}

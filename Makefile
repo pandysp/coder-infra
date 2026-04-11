@@ -1,4 +1,9 @@
-.PHONY: validate lint push-templates new-template
+.PHONY: validate lint push-templates new-template init
+
+# --- Infrastructure -----------------------------------------------------------
+
+init: ## Initialize Terraform (uses backend.tf for remote state if present)
+	cd terraform && tofu init
 
 # --- Validation --------------------------------------------------------------
 

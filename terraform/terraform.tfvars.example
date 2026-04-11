@@ -1,39 +1,3 @@
-# ============================================================================
-# SECURITY WARNING: Terraform state contains secrets in plain text
-# ============================================================================
-# The local terraform.tfstate file stores ALL resource attributes including:
-# - SSH private key (tls_private_key.deploy)
-# - Tailscale auth key (in hcloud_server.coder user_data)
-# - Anthropic API key, Claude setup token, GitHub OAuth client secret
-#
-# Recommendations:
-# - chmod 600 terraform.tfstate terraform.tfstate.backup
-# - Never commit terraform.tfstate to version control
-# - For encrypted state, use one of these backends:
-#
-#   Hetzner Object Storage (S3-compatible, you already have the account):
-#     terraform {
-#       backend "s3" {
-#         bucket   = "coder-infra-state"
-#         key      = "terraform.tfstate"
-#         endpoints = { s3 = "https://fsn1.your-objectstorage.hetzner.com" }
-#         region   = "eu-central-1"
-#         skip_credentials_validation = true
-#         skip_metadata_api_check     = true
-#         skip_requesting_account_id  = true
-#         skip_s3_checksum            = true
-#       }
-#     }
-#
-#   Terraform Cloud (free tier, encrypted at rest):
-#     terraform {
-#       cloud {
-#         organization = "your-org"
-#         workspaces { name = "coder-infra" }
-#       }
-#     }
-# ============================================================================
-
 # Required
 hcloud_token       = "<your-hetzner-api-token>"
 tailscale_auth_key = "<your-tailscale-auth-key>"
@@ -47,10 +11,20 @@ coder_admin_email  = "your@email.com"
 # server_location = "fsn1"
 # github_oauth_client_id     = ""   # GitHub OAuth App for external auth
 # github_oauth_client_secret = ""   # (create at github.com/settings/developers)
-# coder_domain             = ""     # Custom domain, e.g. coder.spannagel.dev
-# cloudflare_api_token     = ""     # Required for wildcard TLS when coder_domain is set
+
+# Custom domain (requires Cloudflare for DNS-01 TLS + DNS record management)
+# coder_domain         = ""     # e.g. coder.spannagel.dev
+# cloudflare_api_token = ""     # Cloudflare API token (DNS zone edit + ACME)
+# cloudflare_zone_id   = ""     # Cloudflare zone ID for DNS records
+# tailnet_dns_name     = ""     # Tailscale MagicDNS FQDN, e.g. coder-dev.tail1234.ts.net
+
+# Monitoring
+# grafana_admin_user     = "admin"
+# grafana_admin_password = ""
+# alertmanager_webhook_url = ""
 
 # Change this value to re-run Ansible without replacing the server.
-# Useful after rotating API keys or changing Ansible config.
-# Example: force_reprovision = "2026-03-23-rotated-api-key"
 # force_reprovision = ""
+
+# Remote state: copy backend.hcl.example to backend.hcl and run `make init`.
+# Without backend.hcl, state is stored locally (fine for getting started).
