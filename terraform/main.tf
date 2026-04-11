@@ -1,7 +1,7 @@
-check "custom_domain_requires_cloudflare_token" {
+check "custom_domain_requires_cloudflare" {
   assert {
-    condition     = var.coder_domain == "" || var.cloudflare_api_token != ""
-    error_message = "cloudflare_api_token is required when coder_domain is set. Caddy needs it for ACME DNS-01 TLS certificate issuance."
+    condition     = var.coder_domain == "" || (var.cloudflare_api_token != "" && var.cloudflare_zone_id != "" && var.tailnet_dns_name != "")
+    error_message = "When coder_domain is set, cloudflare_api_token, cloudflare_zone_id, and tailnet_dns_name are all required. Caddy needs the token for ACME DNS-01; Terraform manages DNS CNAMEs via the zone ID pointing to the MagicDNS name."
   }
 }
 

@@ -66,8 +66,20 @@ variable "coder_domain" {
 
 variable "cloudflare_api_token" {
   type        = string
-  description = "Cloudflare API token for ACME DNS-01 challenge (required when coder_domain is set)"
+  description = "Cloudflare API token for ACME DNS-01 and DNS record management (required when coder_domain is set)"
   sensitive   = true
+  default     = ""
+}
+
+variable "cloudflare_zone_id" {
+  type        = string
+  description = "Cloudflare zone ID for DNS record management (required when coder_domain is set)"
+  default     = ""
+}
+
+variable "tailnet_dns_name" {
+  type        = string
+  description = "Tailscale MagicDNS FQDN (e.g., coder-dev.tail50c4c7.ts.net). DNS CNAMEs point here instead of the Tailscale IP, so records auto-follow IP changes."
   default     = ""
 }
 
